@@ -18,25 +18,26 @@ import {
 interface HeaderProps {
   onSearchGlobal?: (query: string) => void;
   userRole: 'administrador' | 'voluntario' | 'coordenador';
-  onChangeUserRole: (role: 'administrador' | 'voluntario') => void;
+  onChangeUserRole?: (role: 'administrador' | 'voluntario') => void;
   onLogout: () => void;
   onToggleMobileSidebar?: () => void;
   parishName?: string;
   isSidebarMinimized?: boolean;
   onToggleMinimizeSidebar?: () => void;
   currentUserName?: string;
+  currentUserEmail?: string;
 }
 
 export default function Header({
   onSearchGlobal,
   userRole,
-  onChangeUserRole,
   onLogout,
   onToggleMobileSidebar,
   parishName,
   isSidebarMinimized = false,
   onToggleMinimizeSidebar,
-  currentUserName
+  currentUserName,
+  currentUserEmail
 }: HeaderProps) {
   const [searchValue, setSearchValue] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -213,83 +214,76 @@ export default function Header({
             </div>
           </button>
 
-          {/* User Role Switcher Dropdown */}
+          {/* User Profile Details Modal / Dropdown */}
           {showUserMenu && (
-            <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-auto sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-72 max-w-xs bg-white rounded-2xl shadow-xl border border-[#dee8ff] p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-2 py-1 mb-2 border-b border-[#dee8ff]">
-                <span className="text-[11px] font-bold text-[#3f4942] uppercase tracking-wider block">
-                  Perfil de Operação
-                </span>
-                <span className="text-[12px] text-[#111c2c]">
-                  Selecione o perfil do plantão:
+            <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-auto sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm bg-white rounded-2xl shadow-xl border border-[#dee8ff] p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-150 space-y-3">
+              {/* Profile Header */}
+              <div className="flex items-center gap-3 pb-3 border-b border-[#dee8ff]">
+                <div className="w-11 h-11 rounded-full bg-[#9cf5c5] text-[#00603e] font-bold flex items-center justify-center text-[14px] ring-2 ring-[#80d8aa]/40 shadow-sm shrink-0">
+                  {isAdmin ? 'AN' : 'CL'}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[14px] font-bold text-[#111c2c] truncate">
+                    {displayName}
+                  </span>
+                  <span className="text-[11px] text-[#3f4942] truncate">
+                    {currentUserEmail || (isAdmin ? 'anderson@paroquia.org' : 'claudilene@paroquia.org')}
+                  </span>
+                  <div className="mt-1">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      isAdmin 
+                        ? 'bg-[#9cf5c5] text-[#005234] border-[#00603e]/30' 
+                        : 'bg-[#d6e3ff] text-[#004282] border-[#004282]/30'
+                    }`}>
+                      {isAdmin ? <ShieldCheck className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                      <span>{isAdmin ? 'Perfil Administrador' : 'Perfil Voluntário'}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permissions & Security Scope */}
+              <div className="p-3 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[11px] text-[#3f4942] space-y-1">
+                <span className="font-bold text-[#111c2c] block">Escopo de Acesso:</span>
+                <p>
+                  {isAdmin 
+                    ? 'Acesso pleno: gestão de relatórios, prestação de contas, visitas e configurações do sistema.' 
+                    : 'Acesso restrito: pesquisa de famílias beneficiárias e registro de entrega de cestas.'}
+                </p>
+              </div>
+
+              {/* Security Policy Reminder */}
+              <div className="p-2.5 rounded-xl bg-[#f9f9ff] border border-[#dee8ff] text-[11px] text-[#3f4942]">
+                <span className="text-[#004282] font-medium block">
+                  Autenticação obrigatória: para alternar entre voluntário e administrador, é necessário efetuar login com as credenciais do usuário correspondente.
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                {/* Option 1: Administrador (Anderson) */}
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-[#dee8ff] space-y-2">
                 <button
                   type="button"
                   onClick={() => {
-                    onChangeUserRole('administrador');
                     setShowUserMenu(false);
+                    onLogout();
                   }}
-                  className={`flex items-center justify-between p-2.5 rounded-xl text-left text-[13px] transition-colors min-h-[44px] ${
-                    isAdmin
-                      ? 'bg-[#00603e] text-white font-bold shadow-sm'
-                      : 'hover:bg-[#f0f3ff] text-[#111c2c]'
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-[12px] font-bold text-[#004282] bg-[#e7eeff] hover:bg-[#dee8ff] transition-colors min-h-[42px]"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <ShieldCheck className={`w-4 h-4 ${isAdmin ? 'text-white' : 'text-[#00603e]'}`} />
-                    <div className="flex flex-col">
-                      <span>Anderson (Administrador)</span>
-                      <span className={`text-[10px] ${isAdmin ? 'text-white/80' : 'text-[#3f4942]'}`}>
-                        Acesso total a relatórios, config e cadastros
-                      </span>
-                    </div>
-                  </div>
-                  {isAdmin && <span className="text-[11px]">✓</span>}
+                  <User className="w-4 h-4 text-[#00603e]" />
+                  <span>Trocar de Usuário (Fazer Login)</span>
                 </button>
 
-                {/* Option 2: Voluntário (Claudilene) */}
                 <button
                   type="button"
                   onClick={() => {
-                    onChangeUserRole('voluntario');
                     setShowUserMenu(false);
+                    onLogout();
                   }}
-                  className={`flex items-center justify-between p-2.5 rounded-xl text-left text-[13px] transition-colors min-h-[44px] ${
-                    !isAdmin
-                      ? 'bg-[#00603e] text-white font-bold shadow-sm'
-                      : 'hover:bg-[#f0f3ff] text-[#111c2c]'
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-[12px] font-bold text-[#ba1a1a] hover:bg-[#ffdad6]/60 transition-colors min-h-[42px]"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <User className={`w-4 h-4 ${!isAdmin ? 'text-white' : 'text-[#455f88]'}`} />
-                    <div className="flex flex-col">
-                      <span>Claudilene (Voluntário)</span>
-                      <span className={`text-[10px] ${!isAdmin ? 'text-white/80' : 'text-[#3f4942]'}`}>
-                        Apenas pesquisa e entrega de cestas
-                      </span>
-                    </div>
-                  </div>
-                  {!isAdmin && <span className="text-[11px]">✓</span>}
+                  <LogOut className="w-4 h-4" />
+                  <span>Sair do Sistema</span>
                 </button>
-
-                {/* Sair / Logout */}
-                <div className="pt-1.5 mt-1 border-t border-[#dee8ff]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      onLogout();
-                    }}
-                    className="w-full flex items-center gap-2 p-2.5 rounded-xl text-left text-[12px] font-bold text-[#ba1a1a] hover:bg-[#ffdad6]/60 transition-colors min-h-[44px]"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sair do Sistema</span>
-                  </button>
-                </div>
               </div>
             </div>
           )}

@@ -673,13 +673,13 @@ export default function Home() {
             }
           }}
           userRole={userRole}
-          onChangeUserRole={handleChangeUserRole}
           onLogout={handleLogout}
           onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
           parishName={settings.parishName}
           isSidebarMinimized={isSidebarMinimized}
           onToggleMinimizeSidebar={handleToggleSidebarMinimized}
           currentUserName={currentUser?.name}
+          currentUserEmail={currentUser?.email}
         />
 
         {/* Dynamic Views Container (with pb-20 on mobile to not be obscured by bottom navigation) */}
