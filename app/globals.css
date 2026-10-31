@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  --color-primary: #00603e;
+  --color-primary-container: #1b7a53;
+  --color-primary-fixed: #9cf5c5;
+  --color-primary-fixed-dim: #80d8aa;
+  --color-on-primary-fixed: #002112;
+  --color-on-primary-fixed-variant: #005234;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #acffd1;
+
+  --color-secondary: #455f88;
+  --color-secondary-container: #b6d0ff;
+  --color-secondary-fixed: #d6e3ff;
+  --color-secondary-fixed-dim: #adc7f7;
+  --color-on-secondary-fixed: #001b3c;
+  --color-on-secondary-fixed-variant: #2d476f;
+  
+  --color-tertiary: #814400;
+  --color-tertiary-container: #a45800;
+  --color-tertiary-fixed: #ffdcc3;
+  --color-tertiary-fixed-dim: #ffb77d;
+  --color-on-tertiary-fixed: #2f1500;
+  --color-on-tertiary-fixed-variant: #6e3900;
+  
+  --color-surface: #f9f9ff;
+  --color-surface-dim: #cfdaf1;
+  --color-surface-bright: #f9f9ff;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f0f3ff;
+  --color-surface-container: #e7eeff;
+  --color-surface-container-high: #dee8ff;
+  --color-surface-container-highest: #d8e3fa;
+  
+  --color-on-surface: #111c2c;
+  --color-on-surface-variant: #3f4942;
+  --color-outline: #6f7a72;
+  --color-outline-variant: #bec9c0;
+  --color-background: #f9f9ff;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #bec9c0;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6f7a72;
+}

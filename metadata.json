@@ -1,0 +1,7 @@
+{
+  "name": "Sistema de Gestão Pastoral dos Vicentinos",
+  "description": "Sistema de gestão e entrega rápida de benefícios alimentares da Pastoral dos Vicentinos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
