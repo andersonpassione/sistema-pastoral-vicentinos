@@ -1,52 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase';
+import { supabaseAdmin, isSupabaseConfigured, hasValidAdminSecret } from '@/lib/supabase';
 import { getAllUsers as getLocalUsers, insertUser as insertLocalUser, updateUserPassword as updateLocalPassword, deleteUser as deleteLocalUser } from '@/src/db/queries';
 
 export async function GET() {
   try {
     if (isSupabaseConfigured()) {
       try {
-        // Fetch users from Supabase Auth
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-        
-        // Fetch profiles from public.users table
+        let authUsersList: any[] = [];
+
+        // Só consulta Supabase Auth admin se a secret key for válida
+        if (hasValidAdminSecret()) {
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+          if (!authError && authData?.users) {
+            authUsersList = authData.users;
+          }
+        }
+
+        // Consultar tabela pública de perfis no Supabase (funciona com chave anon/publishable)
         const { data: publicProfiles, error: publicError } = await supabaseAdmin
           .from('users')
           .select('*');
 
-        if (!authError && authData?.users && authData.users.length > 0) {
-          // Merge auth users with public profiles
-          const combined = authData.users.map((authUser) => {
+        if (!publicError && publicProfiles && publicProfiles.length > 0) {
+          const mapped = publicProfiles.map((p: any) => {
+            const matchedAuth = authUsersList.find((au) => au.id === p.uid || au.email === `${p.username}@paroquia.org`);
+            return {
+              id: p.id,
+              uid: p.uid || matchedAuth?.id || null,
+              username: p.username,
+              name: p.name,
+              email: matchedAuth?.email || `${p.username}@paroquia.org`,
+              role: p.role || 'voluntario',
+              shift: p.shift || 'Plantão',
+              active: p.active ?? true,
+              created_at: p.created_at,
+            };
+          });
+
+          return NextResponse.json({ success: true, data: mapped });
+        }
+
+        // Se publicProfiles estiver vazio mas temos authUsersList
+        if (authUsersList.length > 0) {
+          const combined = authUsersList.map((authUser) => {
             const meta = authUser.user_metadata || {};
             const email = authUser.email || '';
             const defaultUsername = email.split('@')[0] || 'usuario';
-            
-            const matchedProfile = (publicProfiles || []).find(
-              (p: any) => p.uid === authUser.id || p.username === (meta.username || defaultUsername)
-            );
 
             return {
-              id: matchedProfile?.id || authUser.id,
+              id: authUser.id,
               uid: authUser.id,
-              username: matchedProfile?.username || meta.username || defaultUsername,
-              name: matchedProfile?.name || meta.name || defaultUsername,
+              username: meta.username || defaultUsername,
+              name: meta.name || defaultUsername,
               email: email,
-              role: matchedProfile?.role || meta.role || 'voluntario',
-              shift: matchedProfile?.shift || meta.shift || 'Plantão',
-              active: matchedProfile?.active ?? true,
+              role: meta.role || 'voluntario',
+              shift: meta.shift || 'Plantão',
+              active: true,
               created_at: authUser.created_at,
             };
           });
 
           return NextResponse.json({ success: true, data: combined });
         }
-
-        // Fallback to public.users if auth listing is empty or has error
-        if (!publicError && publicProfiles && publicProfiles.length > 0) {
-          return NextResponse.json({ success: true, data: publicProfiles });
-        }
       } catch (sbErr) {
-        console.warn('Erro ao consultar usuários no Supabase Auth, tentando tabela local:', sbErr);
+        console.warn('Erro ao consultar usuários no Supabase, tentando tabela local:', sbErr);
       }
     }
 
@@ -89,31 +106,30 @@ export async function POST(req: NextRequest) {
 
     if (isSupabaseConfigured()) {
       try {
-        // Create user in Supabase Auth
-        const { data: authCreated, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email: userEmail,
-          password: cleanPassword,
-          email_confirm: true,
-          user_metadata: {
-            name: name.trim(),
-            username: cleanUsername,
-            role: userRole,
-            shift: userShift,
-          },
-        });
+        let authUid: string | null = null;
 
-        if (authErr && !authErr.message.includes('already registered')) {
-          throw authErr;
+        // Se a secret_key for válida, cria também no Supabase Auth
+        if (hasValidAdminSecret()) {
+          const { data: authCreated } = await supabaseAdmin.auth.admin.createUser({
+            email: userEmail,
+            password: cleanPassword,
+            email_confirm: true,
+            user_metadata: {
+              name: name.trim(),
+              username: cleanUsername,
+              role: userRole,
+              shift: userShift,
+            },
+          });
+          authUid = authCreated?.user?.id || null;
         }
 
-        const authUid = authCreated?.user?.id;
-
-        // Upsert into public.users table
+        // Upsert na tabela public.users
         const profilePayload = {
-          uid: authUid || null,
+          uid: authUid,
           username: cleanUsername,
           name: name.trim(),
-          password: '••••••••', // Sensitive password is now safely managed in Supabase Auth
+          password: '••••••••',
           role: userRole,
           shift: userShift,
           active: true,
@@ -125,9 +141,7 @@ export async function POST(req: NextRequest) {
           .select()
           .single();
 
-        if (dbErr) {
-          console.warn('Aviso ao sincronizar perfil public.users:', dbErr);
-        }
+        if (dbErr) throw dbErr;
 
         return NextResponse.json(
           {
@@ -146,15 +160,14 @@ export async function POST(req: NextRequest) {
           { status: 201 }
         );
       } catch (sbErr: any) {
-        console.error('Erro ao cadastrar usuário no Supabase Auth:', sbErr);
+        console.error('Erro ao cadastrar usuário no Supabase:', sbErr);
         return NextResponse.json(
-          { success: false, error: sbErr.message || 'Erro ao criar usuário no Supabase Auth' },
+          { success: false, error: sbErr.message || 'Erro ao criar usuário no Supabase' },
           { status: 500 }
         );
       }
     }
 
-    // Fallback local
     const created = await insertLocalUser({
       username: cleanUsername,
       name: name.trim(),
@@ -197,51 +210,31 @@ export async function PATCH(req: NextRequest) {
 
     if (isSupabaseConfigured()) {
       try {
-        let targetUid = uid;
-
-        // If no UID is provided, find it
-        if (!targetUid) {
-          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers();
-          const found = usersList?.users?.find(
-            (u) =>
-              u.id === identifier ||
-              u.email?.toLowerCase().startsWith(`${String(username || id).toLowerCase()}@`) ||
-              u.user_metadata?.username === String(username || id).toLowerCase()
-          );
-          if (found) {
-            targetUid = found.id;
-          }
+        if (hasValidAdminSecret() && uid) {
+          await supabaseAdmin.auth.admin.updateUserById(uid, { password: cleanPassword });
         }
 
-        // If we found the Supabase Auth UID, update the password directly in Supabase Auth!
-        if (targetUid) {
-          const { error: authUpdateErr } = await supabaseAdmin.auth.admin.updateUserById(
-            targetUid,
-            { password: cleanPassword }
-          );
-
-          if (authUpdateErr) throw authUpdateErr;
-        }
-
-        // Also update public.users
+        // Atualizar public.users
         const query = supabaseAdmin.from('users').update({
           password: '••••••••',
         });
 
-        if (targetUid) {
-          await query.eq('uid', targetUid);
+        if (uid) {
+          await query.eq('uid', uid);
         } else if (username) {
           await query.eq('username', String(username).toLowerCase());
+        } else if (id) {
+          await query.eq('id', Number(id));
         }
 
         return NextResponse.json({
           success: true,
-          message: 'Senha atualizada e criptografada com sucesso no Supabase Auth!',
+          message: 'Senha atualizada com sucesso no Supabase!',
         });
       } catch (sbErr: any) {
-        console.error('Erro ao atualizar senha no Supabase Auth:', sbErr);
+        console.error('Erro ao atualizar senha no Supabase:', sbErr);
         return NextResponse.json(
-          { success: false, error: sbErr.message || 'Erro ao atualizar senha no Supabase Auth.' },
+          { success: false, error: sbErr.message || 'Erro ao atualizar senha no Supabase.' },
           { status: 500 }
         );
       }
@@ -275,25 +268,19 @@ export async function DELETE(req: NextRequest) {
 
     if (isSupabaseConfigured()) {
       try {
-        let targetUid = uid;
-        if (!targetUid) {
-          const { data: usersList } = await supabaseAdmin.auth.admin.listUsers();
-          const found = usersList?.users?.find(
-            (u) =>
-              u.id === identifier ||
-              u.user_metadata?.username === String(username || id).toLowerCase()
-          );
-          if (found) targetUid = found.id;
+        if (hasValidAdminSecret() && uid) {
+          await supabaseAdmin.auth.admin.deleteUser(uid);
         }
 
-        if (targetUid) {
-          await supabaseAdmin.auth.admin.deleteUser(targetUid);
-          await supabaseAdmin.from('users').delete().eq('uid', targetUid);
+        if (uid) {
+          await supabaseAdmin.from('users').delete().eq('uid', uid);
+        } else if (id) {
+          await supabaseAdmin.from('users').delete().eq('id', Number(id));
         } else {
           await supabaseAdmin.from('users').delete().eq('username', String(identifier).toLowerCase());
         }
 
-        return NextResponse.json({ success: true, message: 'Usuário removido do Supabase Auth e do banco.' });
+        return NextResponse.json({ success: true, message: 'Usuário removido do Supabase.' });
       } catch (sbErr: any) {
         console.error('Erro ao deletar usuário do Supabase:', sbErr);
       }
