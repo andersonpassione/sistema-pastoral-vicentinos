@@ -75,9 +75,14 @@ export default function EntregaRapidaView({
 
   // Pastoral minIntervalDays calculation
   const minDays = settings.minIntervalDays || 30;
-  const daysAgo = activeFamily ? activeFamily.lastDeliveryDaysAgo : 0;
-  const isIntervalMet = !activeFamily || daysAgo === 0 || daysAgo >= minDays;
-  const daysRemaining = Math.max(0, minDays - daysAgo);
+  const isNeverDelivered = activeFamily ? (
+    (activeFamily.lastDeliveryDate && activeFamily.lastDeliveryDate.toLowerCase().includes('nunca')) ||
+    (activeFamily.lastDeliveryDate && activeFamily.lastDeliveryDate.toLowerCase().includes('primeira')) ||
+    (activeFamily.lastDeliveryDaysAgo >= 900)
+  ) : false;
+  const daysAgo = activeFamily ? (isNeverDelivered ? 999 : activeFamily.lastDeliveryDaysAgo) : 0;
+  const isIntervalMet = !activeFamily || isNeverDelivered || daysAgo >= minDays;
+  const daysRemaining = isNeverDelivered ? 0 : Math.max(0, minDays - daysAgo);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

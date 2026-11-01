@@ -247,8 +247,12 @@ export default function CadastrarFamiliaModal({
       benefitType: beneficio,
       status: status,
       statusLabel: getFamilyStatusLabel(status),
-      lastDeliveryDate: familyToEdit?.lastDeliveryDate || 'Primeira Retirada',
-      lastDeliveryDaysAgo: familyToEdit ? familyToEdit.lastDeliveryDaysAgo : 0,
+      lastDeliveryDate: familyToEdit
+        ? familyToEdit.lastDeliveryDate
+        : (effectiveTriggerDelivery ? 'Hoje' : 'Nunca retirou'),
+      lastDeliveryDaysAgo: familyToEdit
+        ? familyToEdit.lastDeliveryDaysAgo
+        : (effectiveTriggerDelivery ? 0 : 999),
       lastDeliveryBasketType: familyToEdit?.lastDeliveryBasketType || 'Cesta Básica',
       recommendedBasket: familyToEdit?.recommendedBasket || 'Cesta Básica',
       pastoralNotes: observacoes,

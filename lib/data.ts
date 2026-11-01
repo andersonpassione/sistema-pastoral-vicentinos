@@ -166,8 +166,14 @@ export function checkMonthlyDeliveryLimit(
     };
   }
 
-  // 2. Check if family was delivered today or has "Hoje" in lastDeliveryDate
-  if (family.lastDeliveryDaysAgo === 0 || (family.lastDeliveryDate && family.lastDeliveryDate.toLowerCase().includes('hoje'))) {
+  // 2. Ignore new families that have never received any food basket
+  const lastDate = (family.lastDeliveryDate || '').toLowerCase();
+  if (lastDate.includes('nunca') || lastDate.includes('primeira')) {
+    return { isBlocked: false };
+  }
+
+  // 3. Check if family was delivered today or has "Hoje" in lastDeliveryDate
+  if (family.lastDeliveryDaysAgo === 0 || lastDate.includes('hoje')) {
     return {
       isBlocked: true,
       dateFormatted: family.lastDeliveryDate || 'Hoje',
@@ -175,7 +181,7 @@ export function checkMonthlyDeliveryLimit(
     };
   }
 
-  // 3. Check if lastDeliveryDaysAgo is within the current month (days elapsed since 1st of the month)
+  // 4. Check if lastDeliveryDaysAgo is within the current month (days elapsed since 1st of the month)
   if (typeof family.lastDeliveryDaysAgo === 'number' && family.lastDeliveryDaysAgo > 0 && family.lastDeliveryDaysAgo < dayOfMonth) {
     return {
       isBlocked: true,

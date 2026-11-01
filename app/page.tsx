@@ -504,10 +504,12 @@ export default function Home() {
         });
         const json = await res.json();
         if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao salvar no banco');
-        const inserted = json.data;
+        const inserted = json.data || {};
         const newFamWithId: Family = {
           ...savedFamily,
           id: inserted.id,
+          lastDeliveryDate: triggerFirstDelivery ? 'Hoje' : (inserted.last_delivery_date || 'Nunca retirou'),
+          lastDeliveryDaysAgo: triggerFirstDelivery ? 0 : (inserted.last_delivery_days_ago ?? 999),
         };
         setFamilies((prev) => [newFamWithId, ...prev]);
 
