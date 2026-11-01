@@ -13,6 +13,16 @@ import { supabaseAdmin, SUPABASE_URL } from '@/lib/supabase';
 // Check if we should prefer direct Supabase API connection
 const hasSupabase = Boolean(SUPABASE_URL && !SUPABASE_URL.includes('pastoral-vicentinos.supabase.co'));
 
+export function mapVulnerabilityToPostgres(level?: string | null): 'critica' | 'alta' | 'moderada' | 'estavel' {
+  if (!level) return 'moderada';
+  const clean = String(level).trim().toLowerCase();
+  if (clean === 'extrema' || clean === 'critica') return 'critica';
+  if (clean === 'alta') return 'alta';
+  if (clean === 'moderada') return 'moderada';
+  if (clean === 'baixa' || clean === 'estavel') return 'estavel';
+  return 'moderada';
+}
+
 export async function getAllFamilies() {
   if (hasSupabase) {
     try {
@@ -71,7 +81,7 @@ export async function insertFamily(
         housing_type: familyData.housingType || null,
         rent_value: familyData.rentValue || null,
         reference_point: familyData.referencePoint || null,
-        vulnerability_level: familyData.vulnerabilityLevel || 'moderada',
+        vulnerability_level: mapVulnerabilityToPostgres(familyData.vulnerabilityLevel),
         monthly_income: familyData.monthlyIncome || null,
         per_capita_income: familyData.perCapitaIncome || null,
         benefit_type: familyData.benefitType || null,
@@ -527,6 +537,10 @@ export async function updateFamily(familyId: string, updates: any) {
   if (hasSupabase) {
     try {
       const payload: any = { ...updates, updated_at: new Date().toISOString() };
+      if (payload.vulnerabilityLevel || payload.vulnerability_level) {
+        payload.vulnerability_level = mapVulnerabilityToPostgres(payload.vulnerabilityLevel || payload.vulnerability_level);
+        delete payload.vulnerabilityLevel;
+      }
       const { data, error } = await supabaseAdmin.from('families').update(payload).eq('id', familyId).select().single();
       if (error) throw error;
       return data;
