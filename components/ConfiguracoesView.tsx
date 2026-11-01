@@ -222,20 +222,28 @@ export default function ConfiguracoesView({
   return (
     <div className="p-4 sm:p-6 lg:p-10 max-w-6xl mx-auto space-y-6 sm:space-y-8 animate-in fade-in pb-16">
       {/* Header */}
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <span className="px-2.5 py-0.5 rounded-full bg-[#9cf5c5] text-[#005234] text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
-            Área do Administrador
-          </span>
-          <span className="text-[#3f4942] text-[11px]">•</span>
-          <span className="text-[#3f4942] text-[10px] sm:text-[11px]">Sistema de Gestão Pastoral dos Vicentinos</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-[#9cf5c5] text-[#005234] text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">
+              Área do Administrador
+            </span>
+            <span className="text-[#3f4942] text-[11px]">•</span>
+            <span className="text-[#3f4942] text-[10px] sm:text-[11px]">Sistema de Gestão Pastoral dos Vicentinos</span>
+          </div>
+          <h1 className="text-[24px] sm:text-[28px] lg:text-[32px] font-bold text-[#111c2c] tracking-tight leading-tight">
+            Configurações e Gestão de Usuários
+          </h1>
+          <p className="text-[13px] sm:text-[14px] text-[#3f4942]">
+            Gerenciamento de senhas, perfis de Administrador e Voluntário, e parâmetros paroquiais de entrega.
+          </p>
         </div>
-        <h1 className="text-[24px] sm:text-[28px] lg:text-[32px] font-bold text-[#111c2c] tracking-tight leading-tight">
-          Configurações e Gestão de Usuários
-        </h1>
-        <p className="text-[13px] sm:text-[14px] text-[#3f4942]">
-          Gerenciamento de senhas, perfis de Administrador e Voluntário, e parâmetros paroquiais de entrega.
-        </p>
+
+        {/* Indicador discreto de conexão */}
+        <div className="self-start sm:self-center inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-[#dee8ff] shadow-xs text-[11px] text-[#3f4942]">
+          <span className="w-2 h-2 rounded-full bg-[#00603e] shrink-0 animate-pulse" />
+          <span className="font-semibold text-[#111c2c]">Supabase Conectado</span>
+        </div>
       </div>
 
       {feedbackMessage && (
@@ -244,19 +252,6 @@ export default function ConfiguracoesView({
           <span>{feedbackMessage}</span>
         </div>
       )}
-
-      {/* Database sync live notice */}
-      <div className="p-4 rounded-2xl bg-[#9cf5c5]/20 border border-[#9cf5c5] flex items-start sm:items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#00603e] text-white flex items-center justify-center shrink-0">
-          <Database className="w-5 h-5" />
-        </div>
-        <div className="text-[12px] sm:text-[13px]">
-          <strong className="text-[#005234] block">Conexão Ativa com o Supabase:</strong>
-          <span className="text-[#233527]">
-            Todas as alterações de senhas, novos usuários e parâmetros são persistidos diretamente na sua base do Supabase em tempo real.
-          </span>
-        </div>
-      </div>
 
       {/* Users & Passwords Management Section */}
       <div className="bg-white rounded-2xl p-4 sm:p-6 border border-[#dee8ff] shadow-sm space-y-4 sm:space-y-5">
@@ -283,25 +278,6 @@ export default function ConfiguracoesView({
             <Plus className="w-4 h-4" />
             <span>Novo Usuário</span>
           </button>
-        </div>
-
-        {/* Supabase Auth Explanation Banner */}
-        <div className="p-4 rounded-xl bg-[#e7eeff] border border-[#dee8ff] space-y-2">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-[#00603e]" />
-            <h4 className="text-[13px] font-bold text-[#004282]">
-              Autenticação Nativa Supabase Auth Ativa
-            </h4>
-          </div>
-          <p className="text-[12px] text-[#3f4942] leading-relaxed">
-            As senhas agora são protegidas pela infraestrutura de segurança do <strong>Supabase Auth</strong>: utilizam <strong>hashing Bcrypt irreversível com salt individual</strong> (nunca são trafegadas ou salvas em texto puro) e os acessos emitem <strong>tokens JWT criptografados</strong> com renovação automática.
-          </p>
-          <div className="pt-1 text-[11px] text-[#004282] font-semibold flex items-center gap-1.5">
-            <KeyRound className="w-3.5 h-3.5 text-[#00603e]" />
-            <span>
-              Você também pode criar, gerenciar e redefinir usuários diretamente no console web do Supabase em <strong>Authentication &gt; Users &gt; Add user</strong>.
-            </span>
-          </div>
         </div>
 
         {/* Modal / Form: Add User */}

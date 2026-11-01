@@ -242,25 +242,8 @@ export default function Header({
                 </div>
               </div>
 
-              {/* Permissions & Security Scope */}
-              <div className="p-3 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[11px] text-[#3f4942] space-y-1">
-                <span className="font-bold text-[#111c2c] block">Escopo de Acesso:</span>
-                <p>
-                  {isAdmin 
-                    ? 'Acesso pleno: gestão de relatórios, prestação de contas, visitas e configurações do sistema.' 
-                    : 'Acesso restrito: pesquisa de famílias beneficiárias e registro de entrega de cestas.'}
-                </p>
-              </div>
-
-              {/* Security Policy Reminder */}
-              <div className="p-2.5 rounded-xl bg-[#f9f9ff] border border-[#dee8ff] text-[11px] text-[#3f4942]">
-                <span className="text-[#004282] font-medium block">
-                  Autenticação obrigatória: para alternar entre voluntário e administrador, é necessário efetuar login com as credenciais do usuário correspondente.
-                </span>
-              </div>
-
               {/* Action Buttons */}
-              <div className="pt-2 border-t border-[#dee8ff] space-y-2">
+              <div className="pt-1 space-y-2">
                 <button
                   type="button"
                   onClick={() => {
