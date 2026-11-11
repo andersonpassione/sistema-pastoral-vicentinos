@@ -70,7 +70,7 @@ export default function Header({
   };
 
   const isAdmin = userRole === 'administrador' || userRole === 'coordenador';
-  const displayName = currentUserName || (isAdmin ? 'Anderson' : 'Claudilene');
+  const displayName = currentUserName || (isAdmin ? 'Administrador' : 'Voluntário');
 
   return (
     <header className={`fixed top-0 left-0 ${isSidebarMinimized ? 'lg:left-20' : 'lg:left-72'} right-0 h-16 bg-white/95 backdrop-blur-xl border-b border-[#dee8ff]/60 shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-3 sm:px-6 lg:px-8 transition-all duration-300 ease-in-out`}>
@@ -199,7 +199,7 @@ export default function Header({
             title="Alternar entre perfil Administrador ou Voluntário"
           >
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#9cf5c5] text-[#00603e] font-bold flex items-center justify-center text-[12px] sm:text-[13px] ring-2 ring-[#80d8aa]/40 shadow-sm shrink-0">
-              {isAdmin ? 'AN' : 'CL'}
+              {(displayName || 'US').slice(0, 2).toUpperCase()}
             </div>
             <div className="hidden md:flex flex-col">
               <div className="flex items-center gap-1.5">
@@ -220,14 +220,14 @@ export default function Header({
               {/* Profile Header */}
               <div className="flex items-center gap-3 pb-3 border-b border-[#dee8ff]">
                 <div className="w-11 h-11 rounded-full bg-[#9cf5c5] text-[#00603e] font-bold flex items-center justify-center text-[14px] ring-2 ring-[#80d8aa]/40 shadow-sm shrink-0">
-                  {isAdmin ? 'AN' : 'CL'}
+                  {(displayName || 'US').slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex flex-col min-w-0">
                   <span className="text-[14px] font-bold text-[#111c2c] truncate">
                     {displayName}
                   </span>
                   <span className="text-[11px] text-[#3f4942] truncate">
-                    {currentUserEmail || (isAdmin ? 'anderson@paroquia.org' : 'claudilene@paroquia.org')}
+                    {currentUserEmail || ''}
                   </span>
                   <div className="mt-1">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${

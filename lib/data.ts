@@ -564,29 +564,18 @@ export interface SystemUser {
   initials: string;
 }
 
-export const INITIAL_SYSTEM_USERS: SystemUser[] = [
-  {
-    id: 'user-anderson',
-    name: 'Anderson',
-    username: 'anderson',
-    email: 'anderson@paroquia.org',
-    password: '',
-    role: 'administrador',
-    roleLabel: 'Administrador',
-    shift: 'Coordenação & Gestão Geral',
-    initials: 'AN'
-  },
-  {
-    id: 'user-claudilene',
-    name: 'Claudilene',
-    username: 'claudilene',
-    email: 'claudilene@paroquia.org',
-    password: '',
-    role: 'voluntario',
-    roleLabel: 'Voluntário',
-    shift: 'Pesquisa e Entrega de Cestas',
-    initials: 'CL'
-  }
-];
+export const DEFAULT_ANONYMOUS_USER: SystemUser = {
+  id: '',
+  name: 'Usuário',
+  username: '',
+  email: '',
+  password: '',
+  role: 'voluntario',
+  roleLabel: 'Voluntário',
+  shift: 'Plantão Vicentino',
+  initials: 'US'
+};
+
+export const INITIAL_SYSTEM_USERS: SystemUser[] = [];
 
 

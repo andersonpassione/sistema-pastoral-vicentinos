@@ -36,7 +36,7 @@ import {
   DEFAULT_SETTINGS,
   SystemUser,
   UserRole,
-  INITIAL_SYSTEM_USERS
+  DEFAULT_ANONYMOUS_USER
 } from '@/lib/data';
 
 function mapSupabaseUser(u: any): SystemUser {
@@ -153,10 +153,10 @@ export default function Home() {
   const [databaseConnected, setDatabaseConnected] = useState<boolean>(false);
 
   // System users loaded from Supabase
-  const [systemUsers, setSystemUsers] = useState<SystemUser[]>(INITIAL_SYSTEM_USERS);
+  const [systemUsers, setSystemUsers] = useState<SystemUser[]>([]);
 
   // Current logged in user
-  const [currentUser, setCurrentUser] = useState<SystemUser>(INITIAL_SYSTEM_USERS[0]);
+  const [currentUser, setCurrentUser] = useState<SystemUser>(DEFAULT_ANONYMOUS_USER);
 
   const userRole: UserRole = currentUser.role || 'administrador';
 
@@ -399,6 +399,7 @@ export default function Home() {
     } catch (e) {
       console.warn('Erro ao finalizar sessão no Supabase:', e);
     }
+    setCurrentUser(DEFAULT_ANONYMOUS_USER);
     setIsAuthenticated(false);
     showToast('Sessão encerrada com sucesso no Supabase Auth.');
   };
@@ -553,7 +554,7 @@ export default function Home() {
       timestamp: now.toISOString(),
       timeFormatted,
       basketType: 'Cesta Básica',
-      volunteerName: currentUser?.name || (userRole === 'administrador' ? 'Anderson' : 'Claudilene'),
+      volunteerName: currentUser?.name || 'Voluntário',
       parishUnit: settings.parishName || 'Paróquia',
       status: 'Concluído',
       pastoralVisitRequested: scheduleVisit,
@@ -570,7 +571,7 @@ export default function Home() {
           familyName: family.name,
           timestamp: now.toISOString(),
           basketType: 'Cesta Básica',
-          volunteerName: currentUser?.name || (userRole === 'administrador' ? 'Anderson' : 'Claudilene'),
+          volunteerName: currentUser?.name || 'Voluntário',
           parishUnit: settings.parishName || 'Matriz Santíssimo Redentor',
           status: 'concluida',
           pastoralVisitRequested: scheduleVisit,
@@ -862,7 +863,7 @@ export default function Home() {
         families={families}
         preselectedFamily={selectedFamilyForVisit}
         onSaveVisit={handleSaveVisit}
-        currentVolunteerName={currentUser?.name || (isAdmin ? 'Anderson' : 'Claudilene')}
+        currentVolunteerName={currentUser?.name || 'Voluntário'}
       />
 
       {/* Floating Toast Notification */}

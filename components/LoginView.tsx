@@ -47,57 +47,73 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
     setIsLoading(true);
 
     try {
-      // Normalizar para e-mail caso tenha digitado apenas o username (ex: 'anderson' -> 'anderson@paroquia.org')
-      const primaryEmail = cleanInput.includes('@') ? cleanInput : `${cleanInput}@paroquia.org`;
+      // Resolução dinâmica de e-mail para o Supabase Auth (sem nenhum dado hardcoded no código fonte)
+      const candidateEmails: string[] = [];
 
-      // Autenticação exclusiva via Supabase Auth
-      let authResponse = await supabase.auth.signInWithPassword({
-        email: primaryEmail,
-        password: cleanPassword,
-      });
+      if (cleanInput.includes('@')) {
+        candidateEmails.push(cleanInput);
+      } else {
+        // Se foi informado apenas o username, verifica se o perfil já foi carregado do banco
+        const matchedSystemUser = users.find(
+          (u) => u.username?.toLowerCase() === cleanInput
+        );
+        if (matchedSystemUser?.email && !candidateEmails.includes(matchedSystemUser.email)) {
+          candidateEmails.push(matchedSystemUser.email);
+        }
+        candidateEmails.push(`${cleanInput}@paroquia.org`);
+      }
 
-      // Suporte a e-mail alternativo se for o usuário Anderson
-      if (authResponse.error && (cleanInput === 'anderson' || cleanInput.includes('anderson'))) {
-        const altEmail = primaryEmail === 'anderson@paroquia.org' ? 'andersonpassione@gmail.com' : 'anderson@paroquia.org';
-        const retry = await supabase.auth.signInWithPassword({
-          email: altEmail,
-          password: cleanPassword,
-        });
-        if (!retry.error) {
-          authResponse = retry;
+      let authResponse: any = null;
+      let lastErrorMessage = 'Usuário ou senha incorretos.';
+
+      // Autenticação direta no Supabase Auth usando a senha exata digitada pelo usuário
+      for (const email of candidateEmails) {
+        try {
+          const res = await supabase.auth.signInWithPassword({
+            email,
+            password: cleanPassword,
+          });
+          if (!res.error && res.data?.user) {
+            authResponse = res;
+            break;
+          } else if (res.error) {
+            lastErrorMessage = res.error.message;
+          }
+        } catch (e: any) {
+          lastErrorMessage = e.message || lastErrorMessage;
         }
       }
 
-      if (authResponse.error) {
-        throw new Error('Usuário ou senha incorretos.');
+      if (!authResponse?.data?.user) {
+        throw new Error('Usuário ou senha incorretos no Supabase.');
       }
 
       const authUser = authResponse.data.user;
       const meta = authUser?.user_metadata || {};
 
-      // Localizar perfil correspondente ou montar dados a partir do Supabase Auth
+      // Localizar perfil correspondente dinamicamente no banco ou usar metadados do Supabase Auth
       const matchedUser = users.find(
         (u) =>
           u.uid === authUser.id ||
           u.email?.toLowerCase() === authUser.email?.toLowerCase() ||
-          u.username.toLowerCase() === (meta.username || cleanInput.split('@')[0])
+          u.username?.toLowerCase() === cleanInput
       );
 
       const resolvedRole: UserRole = (
         meta.role || 
         matchedUser?.role || 
-        (authUser.email?.startsWith('anderson') ? 'administrador' : 'voluntario')
+        'voluntario'
       ) as UserRole;
 
-      const resolvedName = meta.name || matchedUser?.name || (resolvedRole === 'administrador' ? 'Anderson' : 'Claudilene');
-      const resolvedShift = meta.shift || matchedUser?.shift || (resolvedRole === 'administrador' ? 'Coordenação Geral' : 'Plantão Sábado Manhã');
+      const resolvedName = meta.name || matchedUser?.name || cleanInput.split('@')[0];
+      const resolvedShift = meta.shift || matchedUser?.shift || (resolvedRole === 'administrador' ? 'Coordenação Geral' : 'Plantão Vicentino');
 
       const finalUser: SystemUser = {
         id: matchedUser?.id || authUser.id,
         uid: authUser.id,
         name: resolvedName,
         username: meta.username || matchedUser?.username || cleanInput.split('@')[0],
-        email: authUser.email || primaryEmail,
+        email: authUser.email || (cleanInput.includes('@') ? cleanInput : `${cleanInput}@paroquia.org`),
         password: '',
         role: resolvedRole,
         roleLabel: resolvedRole === 'administrador' ? 'Administrador' : 'Voluntário',
@@ -108,7 +124,7 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
       onLogin(finalUser);
     } catch (err: any) {
       console.error('Falha na autenticação Supabase Auth:', err);
-      setError(err.message || 'Erro ao conectar. Verifique seus dados de acesso.');
+      setError(err.message || 'Usuário ou senha incorretos no Supabase.');
     } finally {
       setIsLoading(false);
     }
@@ -163,7 +179,7 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
                   type="text"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="Ex: anderson ou claudilene"
+                  placeholder="Digite seu usuário ou e-mail"
                   className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#00603e] transition-all"
                   required
                   disabled={isLoading}

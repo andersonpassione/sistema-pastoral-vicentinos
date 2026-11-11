@@ -40,7 +40,7 @@ export default function ConfiguracoesView({
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('123456');
+  const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('voluntario');
   const [newShift, setNewShift] = useState('Plantão Semanal');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -135,7 +135,7 @@ export default function ConfiguracoesView({
 
       setNewName('');
       setNewUsername('');
-      setNewPassword('123456');
+      setNewPassword('');
       setShowAddUserModal(false);
     } catch (err: any) {
       alert(err.message || 'Erro ao registrar usuário no banco de dados');
@@ -481,7 +481,7 @@ export default function ConfiguracoesView({
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        {user.username !== 'anderson' && (
+                        {!(user.role === 'administrador' && systemUsers.filter((u) => u.role === 'administrador').length <= 1) && (
                           <button
                             type="button"
                             onClick={() => handleDeleteUser(user.id)}
@@ -545,7 +545,7 @@ export default function ConfiguracoesView({
                     >
                       Alterar Senha
                     </button>
-                    {user.username !== 'anderson' && (
+                    {!(user.role === 'administrador' && systemUsers.filter((u) => u.role === 'administrador').length <= 1) && (
                       <button
                         type="button"
                         onClick={() => handleDeleteUser(user.id)}

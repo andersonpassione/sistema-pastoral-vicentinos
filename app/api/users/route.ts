@@ -91,11 +91,11 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanUsername = String(username).trim().toLowerCase();
-    const cleanPassword = password ? String(password).trim() : '123456';
+    const cleanPassword = password ? String(password).trim() : '';
 
-    if (cleanPassword.length < 6) {
+    if (!cleanPassword || cleanPassword.length < 6) {
       return NextResponse.json(
-        { success: false, error: 'Por segurança do Supabase Auth, a senha deve ter no mínimo 6 caracteres.' },
+        { success: false, error: 'A senha é obrigatória e deve ter no mínimo 6 caracteres para o Supabase Auth.' },
         { status: 400 }
       );
     }
