@@ -53,14 +53,25 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
       if (cleanInput.includes('@')) {
         candidateEmails.push(cleanInput);
       } else {
-        // Se foi informado apenas o username, verifica se o perfil já foi carregado do banco
+        if (cleanInput === 'anderson' || cleanInput === 'admin' || cleanInput.includes('anderson')) {
+          candidateEmails.push('andersonpassione@gmail.com', 'anderson@paroquia.org');
+        } else if (cleanInput === 'professor' || cleanInput.includes('professor')) {
+          candidateEmails.push('professor@fatec.sp.gov.br', 'professor@paroquia.org');
+        } else if (cleanInput === 'claudilene' || cleanInput.includes('claudilene') || cleanInput === 'voluntario') {
+          candidateEmails.push('claudilene@paroquia.org');
+        }
+
+        // Se houver usuário carregado do banco com email cadastrado
         const matchedSystemUser = users.find(
           (u) => u.username?.toLowerCase() === cleanInput
         );
         if (matchedSystemUser?.email && !candidateEmails.includes(matchedSystemUser.email)) {
           candidateEmails.push(matchedSystemUser.email);
         }
-        candidateEmails.push(`${cleanInput}@paroquia.org`);
+
+        if (!candidateEmails.includes(`${cleanInput}@paroquia.org`)) {
+          candidateEmails.push(`${cleanInput}@paroquia.org`);
+        }
       }
 
       let authResponse: any = null;
@@ -78,14 +89,24 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
             break;
           } else if (res.error) {
             lastErrorMessage = res.error.message;
+            if (res.error.message?.toLowerCase().includes('email not confirmed')) {
+              throw new Error('E-mail cadastrado no Supabase, mas aguardando confirmação. No painel do Supabase (Authentication > Users), clique nos 3 pontinhos (...) ao lado do usuário e selecione "Confirm user", ou desative "Confirm email" em Providers.');
+            }
           }
         } catch (e: any) {
+          if (e.message?.includes('aguardando confirmação')) {
+            throw e;
+          }
           lastErrorMessage = e.message || lastErrorMessage;
         }
       }
 
       if (!authResponse?.data?.user) {
-        throw new Error('Usuário ou senha incorretos no Supabase.');
+        throw new Error(
+          lastErrorMessage.toLowerCase().includes('email not confirmed')
+            ? 'E-mail cadastrado no Supabase, mas aguardando confirmação. No painel do Supabase (Authentication > Users), clique nos 3 pontinhos (...) ao lado do usuário e selecione "Confirm user", ou desative "Confirm email" em Providers.'
+            : 'Usuário ou senha incorretos no Supabase.'
+        );
       }
 
       const authUser = authResponse.data.user;
