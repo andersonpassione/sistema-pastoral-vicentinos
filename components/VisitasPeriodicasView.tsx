@@ -1,26 +1,26 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   HeartHandshake, 
   Search, 
-  Filter, 
   Plus, 
   Calendar, 
   Clock, 
   Users, 
   MapPin, 
-  Home, 
-  Printer, 
   CheckCircle2, 
   AlertTriangle, 
   ChevronDown, 
   FolderOpen,
-  Sparkles,
   FileText,
-  BadgeAlert
+  Eye,
+  X,
+  Download,
+  Home
 } from 'lucide-react';
-import { PeriodicVisit, Family, PeriodicVisitType } from '@/lib/data';
+import { jsPDF } from 'jspdf';
+import { PeriodicVisit, Family } from '@/lib/data';
 
 interface VisitasPeriodicasViewProps {
   visits: PeriodicVisit[];
@@ -100,8 +100,84 @@ export default function VisitasPeriodicasView({
     });
   }, [visits, searchTerm, typeFilter, conditionFilter]);
 
-  const handlePrintVisit = (visit: PeriodicVisit) => {
-    window.print();
+  useEffect(() => {
+    if (!selectedVisitForDetails) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedVisitForDetails(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedVisitForDetails]);
+
+  const handleOpenVisitModal = (visit: PeriodicVisit) => {
+    setSelectedVisitForDetails(visit);
+  };
+
+  const handleDownloadVisitPDF = (visit: PeriodicVisit, matchedFamily?: Family) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    doc.setFillColor(0, 96, 62);
+    doc.rect(0, 0, pageWidth, 32, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('FICHA DE VISITA PERIÓDICA PASTORAL', 14, 14);
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Protocolo: ${visit.protocolNumber}   |   Data: ${visit.dateFormatted} às ${visit.timeFormatted}`, 14, 23);
+
+    let y = 44;
+    doc.setTextColor(17, 28, 44);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('1. IDENTIFICAÇÃO DA FAMÍLIA E VISITA', 14, y);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    const infoLines = [
+      `Família Assistida: ${visit.familyName}`,
+      `CPF: ${visit.familyCpf || matchedFamily?.cpf || 'Não informado'}`,
+      `Endereço: ${visit.familyAddress || matchedFamily?.address || 'Não informado'} (${visit.familyBairro || matchedFamily?.bairro || 'Bairro não informado'})`,
+      `Tipo de Visita: ${visit.visitTypeLabel}`,
+      `Condições de Moradia: ${visit.housingConditions}`,
+      `Visitadores / Voluntários: ${visit.visitors}`,
+      `Registrado por: ${visit.registeredBy || visit.visitors}`,
+    ];
+    infoLines.forEach((line) => {
+      const wrapped = doc.splitTextToSize(line, pageWidth - 28);
+      doc.text(wrapped, 14, y);
+      y += wrapped.length * 5.2;
+    });
+
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('2. PARECER E RELATO PASTORAL', 14, y);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    const summaryWrapped = doc.splitTextToSize(visit.summary || 'Sem observações registradas.', pageWidth - 28);
+    doc.text(summaryWrapped, 14, y);
+    y += summaryWrapped.length * 5.2 + 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('3. DEMANDAS IDENTIFICADAS E ENCAMINHAMENTO', 14, y);
+    y += 7;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.text(`Demandas: ${(visit.detectedNeeds || []).join(', ') || 'Nenhuma informada'}`, 14, y);
+    y += 6;
+    doc.text(`Próxima Visita Recomendada: ${visit.nextVisitRecommendation || 'Conforme acompanhamento mensal'}`, 14, y);
+
+    const safeName = visit.familyName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    doc.save(`Ficha_Visita_${safeName}_${visit.protocolNumber.replace('#', '')}.pdf`);
   };
 
   return (
@@ -419,11 +495,13 @@ export default function VisitasPeriodicasView({
                       )}
                       <button
                         type="button"
-                        onClick={() => handlePrintVisit(visit)}
-                        className="p-2 rounded-lg hover:bg-[#f0f3ff] text-[#3f4942] min-h-[36px] min-w-[36px] flex items-center justify-center"
-                        title="Imprimir Registro de Visita"
+                        onClick={() => handleOpenVisitModal(visit)}
+                        className="px-3 py-1.5 rounded-lg bg-[#f0f3ff] hover:bg-[#dee8ff] text-[#111c2c] text-[12px] font-bold flex items-center gap-1.5 min-h-[36px] transition-colors"
+                        title="Visualizar Ficha da Visita"
+                        aria-label="Visualizar Ficha da Visita"
                       >
-                        <Printer className="w-4 h-4" />
+                        <Eye className="w-3.5 h-3.5 text-[#00603e]" />
+                        <span className="hidden sm:inline">Visualizar Ficha</span>
                       </button>
                     </div>
                   </div>
@@ -433,6 +511,193 @@ export default function VisitasPeriodicasView({
           </div>
         )}
       </div>
+
+      {/* Modal de Visualização Completa da Visita Periódica */}
+      {selectedVisitForDetails && (() => {
+        const visit = selectedVisitForDetails;
+        const matchedFamily = families.find((f) => f.id === visit.familyId);
+        const resolvedCpf = visit.familyCpf || matchedFamily?.cpf;
+        const resolvedAddress = visit.familyAddress || matchedFamily?.address;
+        const resolvedBairro = visit.familyBairro || matchedFamily?.bairro;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+            <div
+              className="fixed inset-0 bg-[#263142]/45 backdrop-blur-sm transition-opacity"
+              onClick={() => setSelectedVisitForDetails(null)}
+            />
+
+            <div className="relative bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl z-10 overflow-hidden animate-in fade-in zoom-in-95">
+              {/* Header */}
+              <div className="px-5 py-4 bg-[#f0f3ff] border-b border-[#dee8ff] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-[#00603e] text-white flex items-center justify-center shadow-xs shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-white text-[#004282] border border-[#d8e3fa]">
+                        {visit.protocolNumber}
+                      </span>
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#9cf5c5] text-[#005234]">
+                        {visit.visitTypeLabel}
+                      </span>
+                    </div>
+                    <h2 className="text-[17px] sm:text-[18px] font-bold text-[#111c2c] truncate mt-0.5">
+                      Ficha da Visita — {visit.familyName}
+                    </h2>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedVisitForDetails(null)}
+                  className="p-2 rounded-full hover:bg-[#dee8ff] text-[#3f4942] min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0"
+                  aria-label="Fechar ficha da visita"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+                {/* Date, Time & Housing */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-xl bg-[#f9f9ff] border border-[#dee8ff]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f7a72] block">
+                      Data e Horário
+                    </span>
+                    <span className="text-[13px] font-bold text-[#111c2c] flex items-center gap-1.5 mt-1">
+                      <Calendar className="w-3.5 h-3.5 text-[#00603e]" />
+                      {visit.dateFormatted} • {visit.timeFormatted}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#f9f9ff] border border-[#dee8ff]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f7a72] block">
+                      Condições da Moradia
+                    </span>
+                    <span className="text-[13px] font-bold text-[#111c2c] flex items-center gap-1.5 mt-1">
+                      <Home className="w-3.5 h-3.5 text-[#00603e]" />
+                      {visit.housingConditions}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#f9f9ff] border border-[#dee8ff]">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f7a72] block">
+                      Próxima Visita
+                    </span>
+                    <span className="text-[13px] font-bold text-[#00603e] flex items-center gap-1.5 mt-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {visit.nextVisitRecommendation || 'Conforme rotina'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Family & Visitors Info */}
+                <div className="p-4 rounded-xl bg-[#f0f3ff]/70 border border-[#dee8ff] grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f7a72] block">
+                      Família Visitada
+                    </span>
+                    <strong className="text-[14px] text-[#111c2c] block mt-0.5">{visit.familyName}</strong>
+                    {resolvedCpf && (
+                      <span className="text-[12px] font-mono text-[#3f4942] block mt-0.5">
+                        CPF: {resolvedCpf}
+                      </span>
+                    )}
+                    {resolvedAddress && (
+                      <span className="text-[12px] text-[#3f4942] flex items-start gap-1 mt-1">
+                        <MapPin className="w-3.5 h-3.5 text-[#00603e] shrink-0 mt-0.5" />
+                        <span>{resolvedAddress}{resolvedBairro ? ` (${resolvedBairro})` : ''}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f7a72] block">
+                      Equipe Visitadora
+                    </span>
+                    <span className="text-[13px] font-semibold text-[#004282] flex items-center gap-1.5 mt-1">
+                      <Users className="w-4 h-4 shrink-0" />
+                      {visit.visitors}
+                    </span>
+                    <span className="text-[11px] text-[#3f4942] block mt-1.5">
+                      Registrado por: <strong>{visit.registeredBy || visit.visitors}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Pastoral Summary */}
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#3f4942] block mb-1.5">
+                    Parecer e Relato Pastoral Completo
+                  </span>
+                  <div className="p-4 rounded-xl bg-[#f9f9ff] border border-[#dee8ff] text-[13px] sm:text-[14px] text-[#111c2c] leading-relaxed whitespace-pre-line">
+                    {visit.summary}
+                  </div>
+                </div>
+
+                {/* Detected Needs */}
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#3f4942] block mb-2">
+                    Demandas e Encaminhamentos Identificados
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    {visit.detectedNeeds && visit.detectedNeeds.length > 0 ? (
+                      visit.detectedNeeds.map((need, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[12px] font-semibold px-3 py-1 rounded-lg bg-[#f0f3ff] text-[#004282] border border-[#dee8ff]"
+                        >
+                          {need}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[12px] text-[#6f7a72]">Nenhuma demanda específica registrada.</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3.5 bg-[#f0f3ff] border-t border-[#dee8ff] flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadVisitPDF(visit, matchedFamily)}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-[#d8e3fa] hover:bg-[#e7eeff] text-[#004282] font-bold text-[12px] sm:text-[13px] flex items-center gap-1.5 min-h-[40px]"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Baixar Ficha (PDF)</span>
+                  </button>
+                  {matchedFamily && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedVisitForDetails(null);
+                        onOpenProntuario(matchedFamily);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#9cf5c5]/60 hover:bg-[#9cf5c5] text-[#005234] font-bold text-[12px] sm:text-[13px] flex items-center gap-1.5 min-h-[40px]"
+                    >
+                      <FolderOpen className="w-4 h-4" />
+                      <span>Abrir Prontuário</span>
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedVisitForDetails(null)}
+                  className="px-5 py-2 rounded-xl bg-[#00603e] hover:bg-[#1b7a53] text-white font-bold text-[13px] min-h-[40px]"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

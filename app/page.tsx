@@ -734,6 +734,9 @@ export default function Home() {
         {/* Sticky Top Header */}
         <Header
           families={families}
+          deliveries={todayDeliveries}
+          visits={visits}
+          settings={settings}
           onSearchGlobal={(query) => {
             setGlobalSearchQuery(query);
           }}
@@ -743,6 +746,8 @@ export default function Home() {
           }}
           onSelectFamilyForDelivery={handleSelectFamilyForDelivery}
           onOpenProntuario={(family) => setSelectedProntuarioFamily(family)}
+          onOpenRegisterVisit={(family) => handleOpenRegisterVisit(family)}
+          onNavigateTab={(tab) => setCurrentTab(tab)}
           userRole={userRole}
           onLogout={handleLogout}
           onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
