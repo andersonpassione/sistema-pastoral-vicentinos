@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Search, 
   Bell, 
@@ -12,11 +12,19 @@ import {
   Menu,
   Church,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Package,
+  FolderOpen,
+  ArrowRight
 } from 'lucide-react';
+import { Family } from '@/lib/data';
 
 interface HeaderProps {
+  families?: Family[];
   onSearchGlobal?: (query: string) => void;
+  onSearchSubmit?: (query: string) => void;
+  onSelectFamilyForDelivery?: (family: Family) => void;
+  onOpenProntuario?: (family: Family) => void;
   userRole: 'administrador' | 'voluntario' | 'coordenador';
   onChangeUserRole?: (role: 'administrador' | 'voluntario') => void;
   onLogout: () => void;
@@ -29,20 +37,59 @@ interface HeaderProps {
 }
 
 export default function Header({
+  families = [],
   onSearchGlobal,
+  onSearchSubmit,
+  onSelectFamilyForDelivery,
+  onOpenProntuario,
   userRole,
   onLogout,
   onToggleMobileSidebar,
-  parishName,
   isSidebarMinimized = false,
   onToggleMinimizeSidebar,
   currentUserName,
   currentUserEmail
 }: HeaderProps) {
   const [searchValue, setSearchValue] = useState('');
+  const [showSearchResults, setShowSearchResults] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(2);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSearchResults(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowSearchResults(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const matchingFamilies = useMemo(() => {
+    const q = searchValue.trim().toLowerCase();
+    if (!q) return [];
+    const cleanDigits = q.replace(/[.\-\s]/g, '');
+    return families
+      .filter((f) => {
+        const matchName = f.name.toLowerCase().includes(q);
+        const matchCpf = cleanDigits ? f.cpf.replace(/[.\-\s]/g, '').includes(cleanDigits) : false;
+        const matchNis = cleanDigits && f.nis ? f.nis.replace(/[.\-\s]/g, '').includes(cleanDigits) : false;
+        const matchBairro = f.bairro ? f.bairro.toLowerCase().includes(q) : false;
+        return matchName || matchCpf || matchNis || matchBairro;
+      })
+      .slice(0, 8);
+  }, [families, searchValue]);
 
   const notifications = [
     {
@@ -64,8 +111,26 @@ export default function Header({
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setSearchValue(val);
+    setShowSearchResults(Boolean(val.trim()));
     if (onSearchGlobal) {
       onSearchGlobal(val);
+    }
+  };
+
+  const handleSearchFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchValue.trim();
+    if (!q) return;
+
+    if (matchingFamilies.length === 1 && onSelectFamilyForDelivery) {
+      onSelectFamilyForDelivery(matchingFamilies[0]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setShowSearchResults(false);
+    if (onSearchSubmit) {
+      onSearchSubmit(q);
     }
   };
 
@@ -108,24 +173,152 @@ export default function Header({
           </div>
         </div>
 
-        {/* Global Search Bar */}
-        <div className="relative flex-1 min-w-0">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3f4942] w-4 h-4 pointer-events-none" />
-          <input
-            value={searchValue}
-            onChange={handleSearchChange}
-            type="text"
-            placeholder="Buscar por CPF ou Nome..."
-            className="w-full h-10 pl-9 pr-8 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa]/80 text-[#111c2c] placeholder:text-[#6f7a72] text-[12px] sm:text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53] transition-all"
-          />
-          {searchValue && (
-            <button 
-              onClick={() => { setSearchValue(''); if (onSearchGlobal) onSearchGlobal(''); }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#6f7a72] hover:text-[#111c2c] p-1"
-              aria-label="Limpar busca"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+        {/* Global Search Bar with Live Dropdown */}
+        <div ref={searchContainerRef} className="relative flex-1 min-w-0">
+          <form onSubmit={handleSearchFormSubmit} className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#3f4942] w-4 h-4 pointer-events-none" />
+            <input
+              value={searchValue}
+              onChange={handleSearchChange}
+              onFocus={() => {
+                if (searchValue.trim()) setShowSearchResults(true);
+              }}
+              type="text"
+              placeholder="Buscar por CPF ou Nome..."
+              className="w-full h-10 pl-9 pr-8 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa]/80 text-[#111c2c] placeholder:text-[#6f7a72] text-[12px] sm:text-[13px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53] transition-all"
+            />
+            {searchValue && (
+              <button 
+                type="button"
+                onClick={() => {
+                  setSearchValue('');
+                  setShowSearchResults(false);
+                  if (onSearchGlobal) onSearchGlobal('');
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#6f7a72] hover:text-[#111c2c] p-1"
+                aria-label="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </form>
+
+          {/* Search Results Dropdown */}
+          {showSearchResults && searchValue.trim() && (
+            <div className="fixed sm:absolute left-3 right-3 sm:left-0 sm:right-auto top-16 sm:top-full sm:mt-2 sm:w-[420px] max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-xl border border-[#dee8ff] overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-3.5 py-2.5 bg-[#f0f3ff] border-b border-[#dee8ff] flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#3f4942]">
+                  Famílias Encontradas ({matchingFamilies.length})
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSearchResults(false)}
+                  className="text-[#6f7a72] hover:text-[#111c2c] p-0.5"
+                  aria-label="Fechar resultados"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {matchingFamilies.length > 0 ? (
+                <div className="max-h-72 overflow-y-auto divide-y divide-[#dee8ff]/60">
+                  {matchingFamilies.map((fam) => {
+                    const isActive = fam.status === 'em_acompanhamento';
+                    return (
+                      <div
+                        key={fam.id}
+                        className="p-3 hover:bg-[#f0f3ff]/70 transition-colors flex items-center justify-between gap-2.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSearchResults(false);
+                            if (onSelectFamilyForDelivery) {
+                              onSelectFamilyForDelivery(fam);
+                            } else if (onOpenProntuario) {
+                              onOpenProntuario(fam);
+                            }
+                          }}
+                          className="flex items-center gap-2.5 min-w-0 flex-1 text-left cursor-pointer"
+                        >
+                          <div className="w-9 h-9 rounded-xl bg-[#9cf5c5] text-[#00603e] font-bold text-[12px] flex items-center justify-center shrink-0">
+                            {fam.initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[13px] font-bold text-[#111c2c] truncate">
+                                {fam.name}
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                                isActive
+                                  ? 'bg-[#9cf5c5]/60 text-[#005234]'
+                                  : fam.status === 'promovida'
+                                    ? 'bg-[#d6e3ff] text-[#004282]'
+                                    : 'bg-[#e2e2e9] text-[#45474c]'
+                              }`}>
+                                {fam.statusLabel}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-[#3f4942] block truncate">
+                              CPF: {fam.cpf} {fam.bairro ? `• ${fam.bairro}` : ''}
+                            </span>
+                          </div>
+                        </button>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          {onOpenProntuario && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowSearchResults(false);
+                                onOpenProntuario(fam);
+                              }}
+                              className="px-2 py-1.5 rounded-lg bg-[#f0f3ff] hover:bg-[#dee8ff] text-[#004282] text-[11px] font-bold flex items-center gap-1 transition-colors"
+                              title="Abrir Prontuário Social"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Prontuário</span>
+                            </button>
+                          )}
+                          {onSelectFamilyForDelivery && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowSearchResults(false);
+                                onSelectFamilyForDelivery(fam);
+                              }}
+                              className="px-2 py-1.5 rounded-lg bg-[#00603e] hover:bg-[#1b7a53] text-white text-[11px] font-bold flex items-center gap-1 transition-colors"
+                              title="Selecionar para Entrega Rápida"
+                            >
+                              <Package className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Entrega</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-5 text-center text-[12px] text-[#3f4942]">
+                  Nenhuma família encontrada para &quot;{searchValue}&quot;.
+                </div>
+              )}
+
+              {onSearchSubmit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSearchResults(false);
+                    onSearchSubmit(searchValue.trim());
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-[#f9f9ff] hover:bg-[#f0f3ff] border-t border-[#dee8ff] text-[12px] font-bold text-[#00603e] flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span>Ver resultados em Famílias Beneficiárias</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

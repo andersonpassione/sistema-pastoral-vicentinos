@@ -89,11 +89,12 @@ export default function EntregaRapidaView({
     const query = searchQuery.trim().toLowerCase();
     if (!query) return;
 
-    const cleanCpf = query.replace(/[.\-\s]/g, '');
+    const cleanDigits = query.replace(/[.\-\s]/g, '');
     const found = families.find(
       (f) =>
         f.name.toLowerCase().includes(query) ||
-        f.cpf.replace(/[.\-\s]/g, '').includes(cleanCpf)
+        (cleanDigits && f.cpf.replace(/[.\-\s]/g, '').includes(cleanDigits)) ||
+        (cleanDigits && f.nis && f.nis.replace(/[.\-\s]/g, '').includes(cleanDigits))
     );
 
     if (found) {

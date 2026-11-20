@@ -36,6 +36,7 @@ interface FamiliasBeneficiariasViewProps {
   onUpdateFamilyStatus?: (familyId: string, newStatus: FamilyStatus) => void;
   onRegisterVisit?: (family: Family) => void;
   userRole?: 'administrador' | 'voluntario' | 'coordenador';
+  externalSearchQuery?: string;
 }
 
 export default function FamiliasBeneficiariasView({
@@ -48,14 +49,15 @@ export default function FamiliasBeneficiariasView({
   onDeleteFamily,
   onUpdateFamilyStatus,
   onRegisterVisit,
-  userRole = 'administrador'
+  userRole = 'administrador',
+  externalSearchQuery = ''
 }: FamiliasBeneficiariasViewProps) {
   const isAdmin = userRole === 'administrador' || userRole === 'coordenador';
   // Confirmation state for deleting family
   const [familyToDelete, setFamilyToDelete] = useState<Family | null>(null);
 
   // Search & Filter state
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(externalSearchQuery);
   const [bairroFilter, setBairroFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [vulnerabilityFilter, setVulnerabilityFilter] = useState('');
@@ -65,16 +67,26 @@ export default function FamiliasBeneficiariasView({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
 
+  // Sync top global search bar with local filter when externalSearchQuery changes
+  const [prevExternalSearch, setPrevExternalSearch] = useState(externalSearchQuery);
+  if (externalSearchQuery !== prevExternalSearch) {
+    setPrevExternalSearch(externalSearchQuery);
+    setSearchTerm(externalSearchQuery);
+    setCurrentPage(1);
+  }
+
   // Filter logic
   const filteredFamilies = useMemo(() => {
     return families.filter((f) => {
       // Text search
       if (searchTerm) {
         const query = searchTerm.toLowerCase();
-        const cleanCpf = query.replace(/[.\-\s]/g, '');
+        const cleanDigits = query.replace(/[.\-\s]/g, '');
         const matchName = f.name.toLowerCase().includes(query);
-        const matchCpf = f.cpf.replace(/[.\-\s]/g, '').includes(cleanCpf);
-        if (!matchName && !matchCpf) return false;
+        const matchCpf = cleanDigits ? f.cpf.replace(/[.\-\s]/g, '').includes(cleanDigits) : false;
+        const matchNis = cleanDigits && f.nis ? f.nis.replace(/[.\-\s]/g, '').includes(cleanDigits) : false;
+        const matchBairro = f.bairro ? f.bairro.toLowerCase().includes(query) : false;
+        if (!matchName && !matchCpf && !matchNis && !matchBairro) return false;
       }
 
       // Bairro filter

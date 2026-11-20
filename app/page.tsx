@@ -148,6 +148,7 @@ function mapSupabaseSettings(s: any): PastoralSettings {
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState<string>('entrega-rapida');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [isLoadingDatabase, setIsLoadingDatabase] = useState<boolean>(true);
   const [databaseConnected, setDatabaseConnected] = useState<boolean>(false);
@@ -670,11 +671,16 @@ export default function Home() {
       <div className={`${isSidebarMinimized ? 'lg:pl-20' : 'lg:pl-72'} flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out`}>
         {/* Sticky Top Header */}
         <Header
+          families={families}
           onSearchGlobal={(query) => {
-            if (query.trim()) {
-              setCurrentTab('familias-beneficiarias');
-            }
+            setGlobalSearchQuery(query);
           }}
+          onSearchSubmit={(query) => {
+            setGlobalSearchQuery(query);
+            setCurrentTab('familias-beneficiarias');
+          }}
+          onSelectFamilyForDelivery={handleSelectFamilyForDelivery}
+          onOpenProntuario={(family) => setSelectedProntuarioFamily(family)}
           userRole={userRole}
           onLogout={handleLogout}
           onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
@@ -713,6 +719,7 @@ export default function Home() {
               onUpdateFamilyStatus={handleUpdateFamilyStatus}
               onRegisterVisit={handleOpenRegisterVisit}
               userRole={userRole}
+              externalSearchQuery={globalSearchQuery}
             />
           )}
 
