@@ -9,6 +9,7 @@ import {
   pastoralSettings,
 } from './schema.ts';
 import { supabaseAdmin, SUPABASE_URL } from '@/lib/supabase';
+import { parseFlexibleDate, isSameCalendarMonth, formatBrazilianDate } from '@/lib/data';
 
 // Check if we should prefer direct Supabase API connection
 const hasSupabase = Boolean(SUPABASE_URL && !SUPABASE_URL.includes('pastoral-vicentinos.supabase.co'));
@@ -195,9 +196,12 @@ export async function getAllDeliveries() {
 }
 
 export async function recordNewDelivery(deliveryData: typeof deliveryRecords.$inferInsert) {
+  const deliveryDateObj = parseFlexibleDate(deliveryData.timestamp) || new Date();
+  const formattedLastDate = formatBrazilianDate(deliveryDateObj);
+
   if (hasSupabase) {
     try {
-      // Check family status
+      // 1. Check family status
       const { data: fam, error: famErr } = await supabaseAdmin
         .from('families')
         .select('name, status')
@@ -210,11 +214,31 @@ export async function recordNewDelivery(deliveryData: typeof deliveryRecords.$in
         }
       }
 
+      // 2. Enforce strict monthly limit (max 1 basket per calendar month per family)
+      const { data: existingDeliveries, error: delCheckErr } = await supabaseAdmin
+        .from('delivery_records')
+        .select('id, timestamp, status, protocol_number')
+        .eq('family_id', deliveryData.familyId);
+
+      if (!delCheckErr && Array.isArray(existingDeliveries)) {
+        const duplicateInMonth = existingDeliveries.find((d: any) => {
+          if (d.status === 'Cancelado' || d.status === 'cancelada') return false;
+          const dDate = parseFlexibleDate(d.timestamp);
+          return isSameCalendarMonth(dDate, deliveryDateObj);
+        });
+
+        if (duplicateInMonth) {
+          throw new Error(
+            `Regra de Negócio: Esta família já recebeu a cesta básica referente a este mês (Protocolo: ${duplicateInMonth.protocol_number || duplicateInMonth.id}). Limite máximo de 1 cesta por mês.`
+          );
+        }
+      }
+
       const payload = {
         family_id: deliveryData.familyId,
         family_name: deliveryData.familyName,
         timestamp: deliveryData.timestamp,
-        basket_type: deliveryData.basketType || 'Padrão 22kg',
+        basket_type: deliveryData.basketType || 'Cesta Básica',
         volunteer_name: deliveryData.volunteerName,
         parish_unit: deliveryData.parishUnit || 'Matriz Santíssimo Redentor',
         status: deliveryData.status || 'concluida',
@@ -231,11 +255,11 @@ export async function recordNewDelivery(deliveryData: typeof deliveryRecords.$in
 
       if (insErr) throw insErr;
 
-      // Update family delivery info
+      // Update family delivery info with explicit DD/MM/YYYY date so it never goes stale
       await supabaseAdmin
         .from('families')
         .update({
-          last_delivery_date: 'Hoje',
+          last_delivery_date: formattedLastDate,
           last_delivery_days_ago: 0,
           updated_at: new Date().toISOString(),
         })
@@ -257,20 +281,35 @@ export async function recordNewDelivery(deliveryData: typeof deliveryRecords.$in
       }
     }
 
+    const existingLocal = await db
+      .select()
+      .from(deliveryRecords)
+      .where(eq(deliveryRecords.familyId, deliveryData.familyId));
+
+    const duplicateLocal = existingLocal.find((d) => {
+      if (d.status === 'Cancelado' || d.status === 'cancelada') return false;
+      const dDate = parseFlexibleDate(d.timestamp);
+      return isSameCalendarMonth(dDate, deliveryDateObj);
+    });
+
+    if (duplicateLocal) {
+      throw new Error('Regra de Negócio: Esta família já recebeu a cesta básica referente a este mês.');
+    }
+
     const inserted = await db.insert(deliveryRecords).values(deliveryData).returning();
     await db
       .update(families)
       .set({
-        lastDeliveryDate: 'Hoje',
+        lastDeliveryDate: formattedLastDate,
         lastDeliveryDaysAgo: 0,
         updatedAt: new Date(),
       })
       .where(eq(families.id, deliveryData.familyId));
 
     return inserted[0];
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error inserting delivery record:', error);
-    throw new Error('Falha ao registrar entrega de cesta.', { cause: error });
+    throw new Error(error.message || 'Falha ao registrar entrega de cesta.', { cause: error });
   }
 }
 

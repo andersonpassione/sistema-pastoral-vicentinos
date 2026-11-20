@@ -22,7 +22,15 @@ import {
   Sparkles,
   Ban
 } from 'lucide-react';
-import { Family, DeliveryRecord, PastoralSettings, checkMonthlyDeliveryLimit, getFamilyStatusLabel } from '@/lib/data';
+import {
+  Family,
+  DeliveryRecord,
+  PastoralSettings,
+  checkMonthlyDeliveryLimit,
+  getFamilyStatusLabel,
+  parseFlexibleDate,
+  isSameCalendarDay
+} from '@/lib/data';
 
 interface EntregaRapidaViewProps {
   families: Family[];
@@ -30,7 +38,11 @@ interface EntregaRapidaViewProps {
   settings: PastoralSettings;
   onOpenNewFamilyModal: () => void;
   onOpenHistoryModal: () => void;
-  onConfirmDelivery: (family: Family, observation: string, scheduleVisit: boolean) => void;
+  onConfirmDelivery: (
+    family: Family,
+    observation: string,
+    scheduleVisit: boolean
+  ) => Promise<{ success: boolean; protocolNumber?: string; error?: string }> | void;
   onViewAllDeliveries: () => void;
   preselectedFamily?: Family | null;
 }
@@ -60,9 +72,15 @@ export default function EntregaRapidaView({
 
   // Delivery submission state
   const [deliveryStatus, setDeliveryStatus] = useState<'idle' | 'saving' | 'success'>('idle');
+  const [deliveryError, setDeliveryError] = useState<string>('');
   const [lastDeliveredFamily, setLastDeliveredFamily] = useState<Family | null>(null);
   const [lastProtocolNumber, setLastProtocolNumber] = useState('');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+
+  // Filter deliveries made strictly today for the "Entregas Realizadas Hoje" widget
+  const todayOnlyDeliveries = todayDeliveries.filter((d) =>
+    isSameCalendarDay(parseFlexibleDate(d.timestamp), new Date())
+  );
 
   // Active beneficiary lookup
   const activeFamily = selectedFamilyId ? families.find((f) => f.id === selectedFamilyId) || null : null;
@@ -86,6 +104,7 @@ export default function EntregaRapidaView({
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setDeliveryError('');
     const query = searchQuery.trim().toLowerCase();
     if (!query) return;
 
@@ -100,46 +119,59 @@ export default function EntregaRapidaView({
     if (found) {
       setSelectedFamilyId(found.id);
       setDeliveryStatus('idle');
+      setIsExceptionAuthorized(false);
+      setObservation(found.pastoralNotes || '');
     } else {
-      alert(`Nenhuma família encontrada para "${searchQuery}". Você pode cadastrar uma nova família pelo botão "+ Novo Cadastro".`);
+      setDeliveryError(`Nenhuma família encontrada para "${searchQuery}". Você pode cadastrar uma nova família pelo botão "Novo Cadastro de Família".`);
     }
   };
 
-  const handleRecordDelivery = () => {
+  const handleRecordDelivery = async () => {
     if (!activeFamily) return;
+    setDeliveryError('');
 
     // Regra de negócio: Famílias com status "Promovida" e "Inativa" não podem receber cestas básicas
     if (isStatusBlocked) {
-      alert(`Entrega bloqueada: Famílias com status "${getFamilyStatusLabel(activeFamily.status)}" não podem receber cestas básicas no dia da distribuição mensal. O cadastro permanece no sistema exclusivamente para fins de histórico estatístico.`);
+      setDeliveryError(`Entrega bloqueada: Famílias com status "${getFamilyStatusLabel(activeFamily.status)}" não podem receber cestas básicas.`);
       return;
     }
 
     // Strict monthly limit: Never allow more than one food basket per calendar month
     if (monthlyCheck.isBlocked) {
-      alert(`Entrega bloqueada: ${monthlyCheck.reason || 'Esta família já recebeu a cesta básica referente a este mês. Não é permitida mais de uma entrega de cesta básica no mês.'}`);
+      setDeliveryError(`Entrega bloqueada: ${monthlyCheck.reason || 'Esta família já recebeu a cesta básica referente a este mês.'}`);
       return;
     }
 
     if (!isIntervalMet && !isExceptionAuthorized) {
-      alert(`Entrega bloqueada: O intervalo mínimo geral de ${minDays} dias ainda não foi cumprido (faltam ${daysRemaining} dias). Para liberar em caso de urgência, marque a autorização excepcional.`);
+      setDeliveryError(`Entrega bloqueada: O intervalo mínimo geral de ${minDays} dias ainda não foi cumprido (faltam ${daysRemaining} dias). Marque a autorização excepcional se houver autorização.`);
       return;
     }
 
     setDeliveryStatus('saving');
 
-    setTimeout(() => {
-      onConfirmDelivery(activeFamily, observation, scheduleVisit);
+    try {
+      const result = await onConfirmDelivery(activeFamily, observation, scheduleVisit);
+      if (result && result.success === false) {
+        setDeliveryStatus('idle');
+        setDeliveryError(result.error || 'Não foi possível registrar a entrega no Supabase.');
+        return;
+      }
+
       setLastDeliveredFamily(activeFamily);
-      const protocol = `#ENT-202610-0${todayDeliveries.length + 1}`;
-      setLastProtocolNumber(protocol);
+      const fallbackYm = `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+      setLastProtocolNumber(result?.protocolNumber || `#ENT-${fallbackYm}-${String(todayDeliveries.length + 1).padStart(2, '0')}`);
       setDeliveryStatus('success');
-    }, 800);
+    } catch (err: any) {
+      setDeliveryStatus('idle');
+      setDeliveryError(err?.message || 'Erro ao gravar entrega no Supabase.');
+    }
   };
 
   const handleClear = () => {
     setSearchQuery('');
     setSelectedFamilyId(null);
     setDeliveryStatus('idle');
+    setDeliveryError('');
     setIsExceptionAuthorized(false);
   };
 
@@ -222,8 +254,10 @@ export default function EntregaRapidaView({
             <span className="text-[#3f4942] font-semibold shrink-0">Sugestões rápidas:</span>
             {families.map((f) => {
               const isBlockedStatus = f.status === 'promovida' || f.status === 'inativa';
-              const isMet = f.lastDeliveryDaysAgo === 0 || f.lastDeliveryDaysAgo >= minDays;
-              const remaining = Math.max(0, minDays - f.lastDeliveryDaysAgo);
+              const famMonthly = checkMonthlyDeliveryLimit(f, todayDeliveries);
+              const famNever = (f.lastDeliveryDate || '').toLowerCase().includes('nunca') || f.lastDeliveryDaysAgo >= 900;
+              const isMet = !famMonthly.isBlocked && (famNever || f.lastDeliveryDaysAgo >= minDays);
+              const remaining = famNever ? 0 : Math.max(0, minDays - f.lastDeliveryDaysAgo);
               return (
                 <button
                   key={f.id}
@@ -232,6 +266,7 @@ export default function EntregaRapidaView({
                     setSelectedFamilyId(f.id);
                     setSearchQuery(f.cpf);
                     setDeliveryStatus('idle');
+                    setDeliveryError('');
                     setIsExceptionAuthorized(false);
                     setObservation(f.pastoralNotes || '');
                   }}
@@ -239,22 +274,49 @@ export default function EntregaRapidaView({
                     selectedFamilyId === f.id
                       ? isBlockedStatus
                         ? 'bg-[#5e6066] text-white font-bold'
+                        : famMonthly.isBlocked
+                        ? 'bg-[#ba1a1a] text-white font-bold'
                         : 'bg-[#1b7a53] text-white font-bold'
                       : isBlockedStatus
                       ? 'bg-[#e2e2e9] text-[#5e6066] hover:bg-[#d6d6de]'
+                      : famMonthly.isBlocked
+                      ? 'bg-[#ffdad6]/70 text-[#93000a] hover:bg-[#ffdad6]'
                       : isMet
                       ? 'bg-[#f0f3ff] text-[#00603e] hover:bg-[#dee8ff]'
                       : 'bg-[#fff4eb] text-[#814400] hover:bg-[#ffdcc3]'
                   }`}
                 >
                   <span>{f.name.split(' ')[0]}</span>
-                  <span className="text-[10px] opacity-80">
-                    {isBlockedStatus ? `(${getFamilyStatusLabel(f.status)})` : isMet ? '(Apto)' : `(${remaining}d rest.)`}
+                  <span className="text-[10px] opacity-85">
+                    {isBlockedStatus
+                      ? `(${getFamilyStatusLabel(f.status)})`
+                      : famMonthly.isBlocked
+                      ? '(1/mês entregue)'
+                      : isMet
+                      ? '(Apto)'
+                      : `(${remaining}d rest.)`}
                   </span>
                 </button>
               );
             })}
           </div>
+
+          {deliveryError && (
+            <div className="mt-3 p-3 rounded-xl bg-[#fff0ef] border border-[#ffb4ab] text-[#ba1a1a] text-[12px] sm:text-[13px] font-medium flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{deliveryError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeliveryError('')}
+                className="p-1 hover:bg-[#ffdad6] rounded-lg"
+                aria-label="Fechar aviso"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </section>
 
         {/* Main Content Grid: Beneficiary Card & Fast Deliveries Log */}
@@ -429,12 +491,14 @@ export default function EntregaRapidaView({
                       <CheckCircle2 className="w-5 h-5 text-[#00603e] shrink-0 mt-0.5" />
                       <div className="flex flex-col">
                         <span className="text-[12px] sm:text-[13px] text-[#111c2c] font-bold">
-                          {daysAgo > 0 
-                            ? `Última retirada há ${daysAgo} dias (${activeFamily.lastDeliveryDate})` 
-                            : 'Primeiro atendimento neste núcleo paroquial'}
+                          {isNeverDelivered
+                            ? 'Primeiro atendimento neste núcleo paroquial'
+                            : `Última retirada há ${daysAgo} ${daysAgo === 1 ? 'dia' : 'dias'} (${activeFamily.lastDeliveryDate})`}
                         </span>
                         <p className="text-[11px] sm:text-[12px] text-[#3f4942] mt-0.5">
-                          Intervalo mínimo paroquial de {minDays} dias cumprido e sem retirada no mês atual. Apto para entrega regular.
+                          {isNeverDelivered
+                            ? 'Família sem retiradas registradas até o momento. Apta para a primeira entrega regular.'
+                            : `Intervalo mínimo paroquial de ${minDays} dias cumprido e sem retirada no mês atual. Apto para entrega regular.`}
                         </p>
                       </div>
                     </div>
@@ -486,13 +550,13 @@ export default function EntregaRapidaView({
                     </span>
                     <div className="flex items-center gap-1.5 flex-wrap text-[11px] sm:text-[12px] text-[#3f4942] mt-1">
                       <span className="px-2 py-0.5 rounded bg-[#dee8ff] text-[#111c2c] font-bold">
-                        {activeFamily.dependents.filter((d) => d.age < 12).length || 2} Crianças
+                        {activeFamily.dependents.filter((d) => d.age < 12).length} Crianças
                       </span>
                       <span className="px-2 py-0.5 rounded bg-[#dee8ff] text-[#111c2c] font-bold">
-                        {activeFamily.dependents.filter((d) => d.age >= 60).length || 1} Idoso
+                        {activeFamily.dependents.filter((d) => d.age >= 60).length} Idosos
                       </span>
                       <span className="px-2 py-0.5 rounded bg-[#dee8ff] text-[#111c2c] font-bold">
-                        {activeFamily.dependents.filter((d) => d.age >= 12 && d.age < 60).length || 1} Adulto
+                        {activeFamily.dependents.filter((d) => d.age >= 12 && d.age < 60).length} Adultos
                       </span>
                     </div>
                   </div>
@@ -627,39 +691,45 @@ export default function EntregaRapidaView({
                     Entregas Realizadas Hoje
                   </h3>
                   <span className="text-[12px] text-[#3f4942]">
-                    Atendimentos do plantão em {settings.parishName}
+                    Atendimentos de {new Date().toLocaleDateString('pt-BR')} em {settings.parishName}
                   </span>
                 </div>
                 <span className="px-2.5 sm:px-3 py-1 rounded-full bg-[#dee8ff] text-[#111c2c] text-[11px] sm:text-[12px] font-bold">
-                  {todayDeliveries.length} Atendidas
+                  {todayOnlyDeliveries.length} {todayOnlyDeliveries.length === 1 ? 'Atendida' : 'Atendidas'}
                 </span>
               </div>
 
               {/* Deliveries Today List */}
               <div className="flex flex-col gap-2 sm:gap-2.5">
-                {todayDeliveries.slice(0, 4).map((del) => (
-                  <div
-                    key={del.id}
-                    className="p-3 sm:p-3.5 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa]/70 flex items-center justify-between gap-3 hover:bg-[#e7eeff] transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#9cf5c5] text-[#00603e] flex items-center justify-center shrink-0">
-                        <Check className="w-4 h-4 stroke-[2.5]" />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-[13px] text-[#111c2c] font-bold truncate">
-                          {del.familyName}
-                        </span>
-                        <span className="text-[11px] text-[#3f4942] truncate">
-                          {del.timeFormatted} • Cesta Básica
-                        </span>
-                      </div>
-                    </div>
-                    <span className="px-2 sm:px-2.5 py-1 rounded-md bg-[#9cf5c5] text-[#005234] text-[10px] sm:text-[11px] font-bold shrink-0">
-                      Concluído
-                    </span>
+                {todayOnlyDeliveries.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-[#f0f3ff]/60 border border-dashed border-[#d8e3fa] text-center text-[12px] text-[#3f4942]">
+                    Nenhuma cesta entregue hoje ({new Date().toLocaleDateString('pt-BR')}).
                   </div>
-                ))}
+                ) : (
+                  todayOnlyDeliveries.slice(0, 4).map((del) => (
+                    <div
+                      key={del.id}
+                      className="p-3 sm:p-3.5 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa]/70 flex items-center justify-between gap-3 hover:bg-[#e7eeff] transition-colors"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#9cf5c5] text-[#00603e] flex items-center justify-center shrink-0">
+                          <Check className="w-4 h-4 stroke-[2.5]" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[13px] text-[#111c2c] font-bold truncate">
+                            {del.familyName}
+                          </span>
+                          <span className="text-[11px] text-[#3f4942] truncate">
+                            {del.timeFormatted} • {del.basketType || 'Cesta Básica'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2 sm:px-2.5 py-1 rounded-md bg-[#9cf5c5] text-[#005234] text-[10px] sm:text-[11px] font-bold shrink-0">
+                        {del.status}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
 
               <div className="pt-1">
@@ -668,7 +738,7 @@ export default function EntregaRapidaView({
                   onClick={onViewAllDeliveries}
                   className="w-full py-2.5 rounded-xl text-[#00603e] text-[13px] font-bold hover:bg-[#f0f3ff] transition-colors flex items-center justify-center gap-1.5 min-h-[44px]"
                 >
-                  <span>Ver todas as {todayDeliveries.length} entregas de hoje</span>
+                  <span>Consultar histórico completo ({todayDeliveries.length} {todayDeliveries.length === 1 ? 'registro' : 'registros'})</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

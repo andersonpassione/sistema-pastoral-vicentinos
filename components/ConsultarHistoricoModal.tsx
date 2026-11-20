@@ -32,11 +32,42 @@ export default function ConsultarHistoricoModal({
   if (!isOpen) return null;
 
   const filtered = deliveries.filter((d) => {
-    if (search && !d.familyName.toLowerCase().includes(search.toLowerCase()) && !d.protocolNumber.toLowerCase().includes(search.toLowerCase())) {
+    if (
+      search &&
+      !d.familyName.toLowerCase().includes(search.toLowerCase()) &&
+      !d.protocolNumber.toLowerCase().includes(search.toLowerCase()) &&
+      !(d.volunteerName || '').toLowerCase().includes(search.toLowerCase())
+    ) {
       return false;
     }
     return true;
   });
+
+  const handleExportCSV = () => {
+    const headers = ['Protocolo', 'Família', 'Data', 'Horário', 'Cesta', 'Voluntário', 'Paróquia', 'Visita Solicitada', 'Observação', 'Status'];
+    const rows = filtered.map((d) => [
+      d.protocolNumber,
+      `"${d.familyName}"`,
+      d.dateFormatted || '-',
+      d.timeFormatted,
+      `"${d.basketType || 'Cesta Básica'}"`,
+      `"${d.volunteerName}"`,
+      `"${d.parishUnit}"`,
+      d.pastoralVisitRequested ? 'Sim' : 'Não',
+      `"${(d.observation || '').replace(/"/g, '""')}"`,
+      d.status,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `livro_registro_entregas_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
@@ -77,12 +108,12 @@ export default function ConsultarHistoricoModal({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filtrar por nome ou número do protocolo..."
+              placeholder="Filtrar por nome, voluntário ou protocolo..."
               className="w-full h-10 pl-9 pr-3 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[13px] text-[#111c2c] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
             />
           </div>
           <button
-            onClick={() => alert('Planilha exportada com sucesso em formato CSV/Excel.')}
+            onClick={handleExportCSV}
             className="px-4 h-10 rounded-xl bg-[#e7eeff] hover:bg-[#dee8ff] text-[#455f88] font-bold text-[12px] flex items-center justify-center gap-2 whitespace-nowrap shrink-0 min-h-[40px]"
           >
             <Download className="w-4 h-4" /> Exportar Livro de Registro
@@ -106,14 +137,19 @@ export default function ConsultarHistoricoModal({
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-[#111c2c] text-[14px]">{item.familyName}</span>
                       <span className="px-2 py-0.5 rounded bg-[#dee8ff] text-[#455f88] font-mono text-[10px] font-bold">
                         {item.protocolNumber}
                       </span>
+                      {item.pastoralVisitRequested && (
+                        <span className="px-2 py-0.5 rounded bg-[#ffeed4] text-[#814400] text-[10px] font-bold">
+                          Visita Solicitada
+                        </span>
+                      )}
                     </div>
                     <div className="text-[12px] text-[#3f4942] flex items-center gap-2 mt-0.5">
-                      <span>Atendido por: {item.volunteerName}</span>
+                      <span>Atendido por: {item.volunteerName} • {item.basketType || 'Cesta Básica'}</span>
                     </div>
                     {item.observation && (
                       <p className="text-[11px] text-[#00603e] italic mt-1 bg-white/70 p-1.5 rounded-lg border border-[#d8e3fa]">
@@ -124,7 +160,9 @@ export default function ConsultarHistoricoModal({
                 </div>
 
                 <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0">
-                  <span className="text-[12px] font-bold text-[#111c2c]">{item.timeFormatted}</span>
+                  <span className="text-[12px] font-bold text-[#111c2c]">
+                    {item.dateFormatted ? `${item.dateFormatted} • ${item.timeFormatted}` : item.timeFormatted}
+                  </span>
                   <span className="px-2.5 py-0.5 rounded-full bg-[#9cf5c5] text-[#005234] text-[11px] font-bold">
                     {item.status}
                   </span>

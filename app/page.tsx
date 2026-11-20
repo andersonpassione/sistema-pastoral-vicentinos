@@ -36,7 +36,11 @@ import {
   DEFAULT_SETTINGS,
   SystemUser,
   UserRole,
-  DEFAULT_ANONYMOUS_USER
+  DEFAULT_ANONYMOUS_USER,
+  parseFlexibleDate,
+  isSameCalendarDay,
+  getCalendarDaysDiff,
+  formatBrazilianDate
 } from '@/lib/data';
 
 function mapSupabaseUser(u: any): SystemUser {
@@ -96,25 +100,63 @@ function mapSupabaseFamily(f: any): Family {
 }
 
 function mapSupabaseDelivery(d: any): DeliveryRecord {
-  const dDate = new Date(d.timestamp);
-  const timeFormatted = !isNaN(dDate.getTime())
+  const dDate = parseFlexibleDate(d.timestamp);
+  const timeFormatted = dDate
     ? dDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    : (d.timestamp && d.timestamp.includes(' ') ? d.timestamp.split(' ')[1] : d.timestamp || '10:00');
+    : (d.timestamp && String(d.timestamp).includes(' ') ? String(d.timestamp).split(' ')[1] : '10:00');
+  const dateFormatted = dDate ? formatBrazilianDate(dDate) : '';
 
   return {
     id: String(d.id),
     familyId: d.family_id || d.familyId,
     familyName: d.family_name || d.familyName,
     timestamp: d.timestamp,
+    dateFormatted,
     timeFormatted,
-    basketType: d.basket_type || d.basketType || 'Padrão 22kg',
+    basketType: d.basket_type || d.basketType || 'Cesta Básica',
     volunteerName: d.volunteer_name || d.volunteerName,
     parishUnit: d.parish_unit || d.parishUnit || 'Matriz',
-    status: d.status === 'concluida' || d.status === 'Concluído' ? 'Concluído' : 'Em Andamento',
+    status: d.status === 'concluida' || d.status === 'Concluído' ? 'Concluído' : d.status === 'Cancelado' || d.status === 'cancelada' ? 'Cancelado' : 'Em Andamento',
     pastoralVisitRequested: Boolean(d.pastoral_visit_requested ?? d.pastoralVisitRequested),
     observation: d.observation || '',
     protocolNumber: d.protocol_number || d.protocolNumber || `#ENT-${d.id}`,
   };
+}
+
+function enrichFamiliesWithDeliveries(rawFamilies: Family[], allDeliveries: DeliveryRecord[]): Family[] {
+  const now = new Date();
+  return rawFamilies.map((fam) => {
+    const familyDeliveries = allDeliveries
+      .filter((d) => d.familyId === fam.id && d.status !== 'Cancelado')
+      .map((d) => ({ record: d, parsed: parseFlexibleDate(d.timestamp) }))
+      .filter((x): x is { record: DeliveryRecord; parsed: Date } => x.parsed !== null)
+      .sort((a, b) => b.parsed.getTime() - a.parsed.getTime());
+
+    if (familyDeliveries.length > 0) {
+      const latest = familyDeliveries[0];
+      const daysAgo = getCalendarDaysDiff(latest.parsed, now);
+      const isToday = isSameCalendarDay(latest.parsed, now);
+      return {
+        ...fam,
+        lastDeliveryDate: isToday
+          ? `Hoje às ${latest.record.timeFormatted}`
+          : formatBrazilianDate(latest.parsed),
+        lastDeliveryDaysAgo: daysAgo,
+      };
+    }
+
+    // Fallback when no delivery record exists: recalculate from lastDeliveryDate if parseable
+    const parsedFamDate = parseFlexibleDate(fam.lastDeliveryDate);
+    if (parsedFamDate) {
+      return {
+        ...fam,
+        lastDeliveryDate: formatBrazilianDate(parsedFamDate),
+        lastDeliveryDaysAgo: getCalendarDaysDiff(parsedFamDate, now),
+      };
+    }
+
+    return fam;
+  });
 }
 
 function mapSupabaseVisit(v: any): PeriodicVisit {
@@ -189,10 +231,22 @@ export default function Home() {
 
         if (!isSubscribed) return;
 
+        let loadedFamilies: Family[] = [];
+        let loadedDeliveries: DeliveryRecord[] = [];
+
+        if (delRes.ok) {
+          const delJson = await delRes.json();
+          if (Array.isArray(delJson.data)) {
+            loadedDeliveries = delJson.data.map(mapSupabaseDelivery);
+            setTodayDeliveries(loadedDeliveries);
+          }
+        }
+
         if (famRes.ok) {
           const famJson = await famRes.json();
           if (Array.isArray(famJson.data)) {
-            setFamilies(famJson.data.map(mapSupabaseFamily));
+            loadedFamilies = famJson.data.map(mapSupabaseFamily);
+            setFamilies(enrichFamiliesWithDeliveries(loadedFamilies, loadedDeliveries));
           }
         }
 
@@ -205,13 +259,6 @@ export default function Home() {
               const matched = mappedUsers.find((u: SystemUser) => u.username === prev.username);
               return matched || mappedUsers[0];
             });
-          }
-        }
-
-        if (delRes.ok) {
-          const delJson = await delRes.json();
-          if (Array.isArray(delJson.data)) {
-            setTodayDeliveries(delJson.data.map(mapSupabaseDelivery));
           }
         }
 
@@ -537,31 +584,22 @@ export default function Home() {
     setFamilyToEdit(null);
   };
 
-  const handleConfirmDelivery = async (family: Family, observation: string, scheduleVisit: boolean) => {
+  const handleConfirmDelivery = async (
+    family: Family,
+    observation: string,
+    scheduleVisit: boolean
+  ): Promise<{ success: boolean; protocolNumber?: string; error?: string }> => {
     // Regra de negócio: Famílias com status "Promovida" e "Inativa" não podem receber cestas básicas
     if (family.status === 'promovida' || family.status === 'inativa') {
-      showToast(`Entrega bloqueada: Famílias com status "${family.statusLabel}" não podem receber cestas básicas (apenas histórico estatístico).`);
-      return;
+      const msg = `Entrega bloqueada: Famílias com status "${family.statusLabel}" não podem receber cestas básicas (apenas histórico estatístico).`;
+      showToast(msg);
+      return { success: false, error: msg };
     }
 
     const now = new Date();
+    const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
     const timeFormatted = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const protocolNumber = `#ENT-202610-0${todayDeliveries.length + 1}`;
-
-    const newRecord: DeliveryRecord = {
-      id: 'del-' + Date.now(),
-      familyId: family.id,
-      familyName: family.name,
-      timestamp: now.toISOString(),
-      timeFormatted,
-      basketType: 'Cesta Básica',
-      volunteerName: currentUser?.name || 'Voluntário',
-      parishUnit: settings.parishName || 'Paróquia',
-      status: 'Concluído',
-      pastoralVisitRequested: scheduleVisit,
-      observation,
-      protocolNumber
-    };
+    const protocolNumber = `#ENT-${ym}-${String(todayDeliveries.length + 1).padStart(2, '0')}`;
 
     try {
       const res = await fetch('/api/deliveries', {
@@ -581,28 +619,52 @@ export default function Home() {
         }),
       });
       const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error || 'Erro ao registrar entrega');
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Erro ao registrar entrega no banco de dados');
+      }
+
+      const savedRecord: DeliveryRecord = json.data
+        ? mapSupabaseDelivery(json.data)
+        : {
+            id: 'del-' + Date.now(),
+            familyId: family.id,
+            familyName: family.name,
+            timestamp: now.toISOString(),
+            dateFormatted: formatBrazilianDate(now),
+            timeFormatted,
+            basketType: 'Cesta Básica',
+            volunteerName: currentUser?.name || 'Voluntário',
+            parishUnit: settings.parishName || 'Paróquia',
+            status: 'Concluído',
+            pastoralVisitRequested: scheduleVisit,
+            observation,
+            protocolNumber,
+          };
+
+      setTodayDeliveries((prev) => [savedRecord, ...prev]);
+
+      // Update family last delivery date
+      setFamilies((prev) =>
+        prev.map((f) =>
+          f.id === family.id
+            ? {
+                ...f,
+                lastDeliveryDate: 'Hoje às ' + savedRecord.timeFormatted,
+                lastDeliveryDaysAgo: 0,
+                pastoralNotes: observation || f.pastoralNotes,
+              }
+            : f
+        )
+      );
+
+      showToast(`Entrega de ${family.name} registrada no Supabase! Protocolo: ${savedRecord.protocolNumber}.`);
+      return { success: true, protocolNumber: savedRecord.protocolNumber };
     } catch (err: any) {
+      const errorMsg = err.message || 'Erro ao gravar entrega no Supabase.';
       console.error('Erro ao gravar entrega no Supabase:', err);
+      showToast(errorMsg);
+      return { success: false, error: errorMsg };
     }
-
-    setTodayDeliveries((prev) => [newRecord, ...prev]);
-
-    // Update family last delivery date
-    setFamilies((prev) =>
-      prev.map((f) =>
-        f.id === family.id
-          ? {
-              ...f,
-              lastDeliveryDate: 'Hoje às ' + timeFormatted,
-              lastDeliveryDaysAgo: 0,
-              pastoralNotes: observation || f.pastoralNotes
-            }
-          : f
-      )
-    );
-
-    showToast(`Entrega de ${family.name} registrada no Supabase! Protocolo: ${protocolNumber}.`);
   };
 
   const handleSelectFamilyForDelivery = (family: Family) => {

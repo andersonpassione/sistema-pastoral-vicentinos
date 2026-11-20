@@ -37,24 +37,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const now = new Date();
+    const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
     const created = await recordNewDelivery({
       familyId,
       familyName,
-      timestamp: timestamp || new Date().toISOString(),
+      timestamp: timestamp || now.toISOString(),
       basketType,
       volunteerName,
       parishUnit,
       status,
       pastoralVisitRequested: Boolean(pastoralVisitRequested),
       observation: observation || null,
-      protocolNumber: protocolNumber || `#ENT-${Date.now().toString().slice(-6)}`,
+      protocolNumber: protocolNumber || `#ENT-${ym}-${Date.now().toString().slice(-4)}`,
     });
 
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error: any) {
     console.error('API /api/deliveries POST error:', error);
     const msg = error.message || '';
-    if (msg.includes('Regra de Negócio') || msg.includes('promovida') || msg.includes('inativa')) {
+    if (
+      msg.includes('Regra de Negócio') ||
+      msg.includes('já recebeu') ||
+      msg.includes('promovida') ||
+      msg.includes('inativa')
+    ) {
       return NextResponse.json({ success: false, error: msg }, { status: 422 });
     }
     return NextResponse.json(

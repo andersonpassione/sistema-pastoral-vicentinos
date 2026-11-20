@@ -19,7 +19,14 @@ import {
   Sparkles,
   ArrowRight
 } from 'lucide-react';
-import { Family, DeliveryRecord, PastoralSettings } from '@/lib/data';
+import {
+  Family,
+  DeliveryRecord,
+  PastoralSettings,
+  checkMonthlyDeliveryLimit,
+  parseFlexibleDate,
+  isSameCalendarMonth
+} from '@/lib/data';
 
 interface RelatoriosViewProps {
   families: Family[];
@@ -35,19 +42,21 @@ export default function RelatoriosView({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<'todos' | 'com-visita' | 'sem-visita'>('todos');
 
-  // 1. Total de Cestas Entregues
-  const totalCestasEntregues = todayDeliveries.filter((d) => d.status !== 'Cancelado').length;
+  // 1. Total de Cestas Entregues no Mês Atual
+  const now = new Date();
+  const entregasMesAtual = todayDeliveries.filter(
+    (d) => d.status !== 'Cancelado' && isSameCalendarMonth(parseFlexibleDate(d.timestamp), now)
+  );
+  const totalCestasEntregues = entregasMesAtual.length;
 
   // 2. Famílias com status "Em acompanhamento" e Projeção de Cestas para o Mês
   const familiasEmAcompanhamento = families.filter((f) => f.status === 'em_acompanhamento');
   const projecaoCestasMes = familiasEmAcompanhamento.length;
 
   // Famílias em acompanhamento já atendidas neste mês
-  const familiasAtendidasNoMes = familiasEmAcompanhamento.filter((f) => {
-    const hasDeliverySession = todayDeliveries.some((d) => d.familyId === f.id && d.status !== 'Cancelado');
-    const isToday = f.lastDeliveryDaysAgo === 0 || (f.lastDeliveryDate && f.lastDeliveryDate.toLowerCase().includes('hoje'));
-    return hasDeliverySession || isToday;
-  }).length;
+  const familiasAtendidasNoMes = familiasEmAcompanhamento.filter(
+    (f) => checkMonthlyDeliveryLimit(f, todayDeliveries).isBlocked
+  ).length;
 
   // Cestas ainda necessárias para fechar o mês
   const cestasPendentesMes = Math.max(0, projecaoCestasMes - familiasAtendidasNoMes);
@@ -110,7 +119,7 @@ ${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Balancete_Pastoral_${settings.parishName.replace(/\s+/g, '_')}_Outubro_2026.txt`;
+    a.download = `Balancete_Pastoral_${settings.parishName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 7)}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -118,10 +127,11 @@ ${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName}
   };
 
   const handleExportCSV = () => {
-    const headers = ['Protocolo', 'Família', 'Data e Horário', 'Voluntário', 'Paróquia', 'Visita Pastoral', 'Status'];
+    const headers = ['Protocolo', 'Família', 'Data', 'Horário', 'Voluntário', 'Paróquia', 'Visita Pastoral', 'Status'];
     const rows = todayDeliveries.map((d) => [
       d.protocolNumber,
       `"${d.familyName}"`,
+      d.dateFormatted || '-',
       d.timeFormatted,
       `"${d.volunteerName}"`,
       `"${d.parishUnit}"`,

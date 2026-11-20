@@ -60,6 +60,7 @@ export interface DeliveryRecord {
   familyId: string;
   familyName: string;
   timestamp: string;
+  dateFormatted?: string;
   timeFormatted: string;
   basketType?: string;
   volunteerName: string;
@@ -133,29 +134,82 @@ export interface MonthlyDeliveryCheck {
   reason?: string;
 }
 
+export function parseFlexibleDate(input?: string | null): Date | null {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  if (!trimmed) return null;
+
+  // Match Brazilian DD/MM/YYYY [HH:mm[:ss]]
+  const brMatch = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(?:às\s+)?(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (brMatch) {
+    const day = Number(brMatch[1]);
+    const month = Number(brMatch[2]) - 1;
+    const year = Number(brMatch[3]);
+    const hour = brMatch[4] ? Number(brMatch[4]) : 12;
+    const minute = brMatch[5] ? Number(brMatch[5]) : 0;
+    const second = brMatch[6] ? Number(brMatch[6]) : 0;
+    const d = new Date(year, month, day, hour, minute, second);
+    if (!isNaN(d.getTime()) && d.getFullYear() === year && d.getMonth() === month && d.getDate() === day) {
+      return d;
+    }
+    return null;
+  }
+
+  // Match ISO YYYY-MM-DD (without time) cleanly in local time
+  const isoDateOnly = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateOnly) {
+    const d = new Date(Number(isoDateOnly[1]), Number(isoDateOnly[2]) - 1, Number(isoDateOnly[3]), 12, 0, 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Standard ISO timestamp
+  const parsed = new Date(trimmed);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function isSameCalendarDay(d1: Date | null, d2: Date = new Date()): boolean {
+  if (!d1) return false;
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
+export function isSameCalendarMonth(d1: Date | null, d2: Date = new Date()): boolean {
+  if (!d1) return false;
+  return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth();
+}
+
+export function getCalendarDaysDiff(pastDate: Date, refDate: Date = new Date()): number {
+  const startPast = new Date(pastDate.getFullYear(), pastDate.getMonth(), pastDate.getDate());
+  const startRef = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+  const diffMs = startRef.getTime() - startPast.getTime();
+  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+export function formatBrazilianDate(date: Date): string {
+  return date.toLocaleDateString('pt-BR');
+}
+
 export function checkMonthlyDeliveryLimit(
   family: Family,
   deliveries: DeliveryRecord[]
 ): MonthlyDeliveryCheck {
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
   const dayOfMonth = now.getDate();
 
-  // 1. Check in deliveries recorded for this family in current month
+  // 1. Check in deliveries recorded for this family in the current calendar month
   const deliveryThisMonth = deliveries.find((d) => {
     if (d.familyId !== family.id) return false;
     if (d.status === 'Cancelado') return false;
-    const dDate = new Date(d.timestamp);
-    if (!isNaN(dDate.getTime())) {
-      return dDate.getFullYear() === currentYear && dDate.getMonth() === currentMonth;
-    }
-    return true; // Recorded in current session's deliveries
+    const dDate = parseFlexibleDate(d.timestamp);
+    return isSameCalendarMonth(dDate, now);
   });
 
   if (deliveryThisMonth) {
-    const dDate = new Date(deliveryThisMonth.timestamp);
-    const dateFormatted = !isNaN(dDate.getTime())
+    const dDate = parseFlexibleDate(deliveryThisMonth.timestamp);
+    const dateFormatted = dDate
       ? dDate.toLocaleDateString('pt-BR') + ' às ' + deliveryThisMonth.timeFormatted
       : deliveryThisMonth.timeFormatted;
     return {
@@ -167,13 +221,26 @@ export function checkMonthlyDeliveryLimit(
   }
 
   // 2. Ignore new families that have never received any food basket
-  const lastDate = (family.lastDeliveryDate || '').toLowerCase();
-  if (lastDate.includes('nunca') || lastDate.includes('primeira')) {
+  const lastDateStr = (family.lastDeliveryDate || '').toLowerCase();
+  if (lastDateStr.includes('nunca') || lastDateStr.includes('primeira') || family.lastDeliveryDaysAgo >= 900) {
     return { isBlocked: false };
   }
 
-  // 3. Check if family was delivered today or has "Hoje" in lastDeliveryDate
-  if (family.lastDeliveryDaysAgo === 0 || lastDate.includes('hoje')) {
+  // 3. If family.lastDeliveryDate is a parseable explicit date (e.g. "31/10/2026"), rely strictly on calendar month
+  const parsedLastDate = parseFlexibleDate(family.lastDeliveryDate);
+  if (parsedLastDate) {
+    if (isSameCalendarMonth(parsedLastDate, now)) {
+      return {
+        isBlocked: true,
+        dateFormatted: formatBrazilianDate(parsedLastDate),
+        reason: `Já recebeu a cesta básica deste mês em ${formatBrazilianDate(parsedLastDate)}. Regra paroquial: limite estrito de 1 cesta básica por mês.`
+      };
+    }
+    return { isBlocked: false };
+  }
+
+  // 4. Fallback for relative "Hoje" string when no parseable date is present
+  if (family.lastDeliveryDaysAgo === 0 || lastDateStr.includes('hoje')) {
     return {
       isBlocked: true,
       dateFormatted: family.lastDeliveryDate || 'Hoje',
@@ -181,7 +248,7 @@ export function checkMonthlyDeliveryLimit(
     };
   }
 
-  // 4. Check if lastDeliveryDaysAgo is within the current month (days elapsed since 1st of the month)
+  // 5. Fallback for days ago within current month
   if (typeof family.lastDeliveryDaysAgo === 'number' && family.lastDeliveryDaysAgo > 0 && family.lastDeliveryDaysAgo < dayOfMonth) {
     return {
       isBlocked: true,
