@@ -17,8 +17,11 @@ import {
   TrendingUp,
   Package,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  FileText
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   Family,
   DeliveryRecord,
@@ -93,37 +96,158 @@ export default function RelatoriosView({
   });
 
   const handleDownloadPDF = () => {
-    const content = `
-======================================================
-BALANCETE E PRESTAÇÃO DE CONTAS PASTORAL
-${settings.parishName.toUpperCase()}
-======================================================
-Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const issueDate = new Date();
+    const monthLabel = issueDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
 
-INDICADORES CONSOLIDADOS:
-• Projeção de Cestas Necessárias no Mês: ${projecaoCestasMes} cestas básicas (Famílias Em Acompanhamento)
-• Cestas Já Entregues no Mês: ${totalCestasEntregues}
-• Cestas Pendentes para Cobrir o Mês: ${cestasPendentesMes} cestas
-• Percentual da Demanda Atendida: ${percentualAtendido}%
-• Total de Famílias Cadastradas: ${totalFamiliasCadastradas} (Ativas, Promovidas e Inativas)
-• Total de Crianças Assistidas (<= 12 anos): ${totalCriancasAssistidas}
-• Total de Pessoas Assistidas: ${totalPessoasAssistidas}
-• Intervalo Mínimo Regulamentar: ${settings.minIntervalDays} dias
-• Limite Mensal: Máximo de 1 cesta básica por mês por família (Cumprido)
+    // Top Institutional Header Band
+    doc.setFillColor(0, 96, 62); // #00603e
+    doc.rect(0, 0, pageWidth, 34, 'F');
 
-REGISTRO DE ENTREGAS:
-${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName} (${d.timeFormatted}) - Voluntário: ${d.volunteerName}`).join('\n')}
-======================================================
-`;
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Balancete_Pastoral_${settings.parishName.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 7)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('BALANCETE OFICIAL E PRESTAÇÃO DE CONTAS', 14, 14);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${settings.parishName.toUpperCase()} • PASTORAL DOS VICENTINOS`, 14, 21);
+    doc.setFontSize(8.5);
+    doc.text(
+      `Competência: ${capitalizedMonth}   |   Emitido em: ${issueDate.toLocaleDateString('pt-BR')} às ${issueDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      14,
+      28
+    );
+
+    // Section 1: Consolidated Indicators Table
+    doc.setTextColor(17, 28, 44);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('1. RESUMO EXECUTIVO E INDICADORES MENSAIS', 14, 44);
+
+    const emAcompCount = familiasEmAcompanhamento.length;
+    const promovidasCount = families.filter((f) => f.status === 'promovida').length;
+    const inativasCount = families.filter((f) => f.status === 'inativa').length;
+
+    autoTable(doc, {
+      startY: 48,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [240, 243, 255],
+        textColor: [17, 28, 44],
+        fontStyle: 'bold',
+        fontSize: 9,
+      },
+      bodyStyles: {
+        fontSize: 8.8,
+        textColor: [40, 50, 60],
+      },
+      columnStyles: {
+        0: { fontStyle: 'bold', cellWidth: 95 },
+        1: { cellWidth: 'auto' },
+      },
+      head: [['Indicador Pastoral', 'Resultado Apurado']],
+      body: [
+        ['Demanda Mensal Projetada (Em Acompanhamento)', `${projecaoCestasMes} cestas básicas`],
+        ['Cestas Entregues no Mês Vigente', `${totalCestasEntregues} cestas (${percentualAtendido}% da meta mensal)`],
+        ['Cestas Pendentes para Cobertura do Mês', `${cestasPendentesMes} cestas`],
+        [
+          'Base de Famílias Cadastradas',
+          `${totalFamiliasCadastradas} total (${emAcompCount} Em acompanhamento, ${promovidasCount} Promovidas, ${inativasCount} Inativas)`,
+        ],
+        ['Crianças Assistidas (até 12 anos)', `${totalCriancasAssistidas} crianças`],
+        ['Total de Pessoas Assistidas (Titulares + Dependentes)', `${totalPessoasAssistidas} pessoas`],
+        [
+          'Regras Paroquiais Vigentes',
+          `Máximo de 1 cesta por mês civil • Intervalo mínimo de ${settings.minIntervalDays} dias`,
+        ],
+      ],
+    });
+
+    const afterSummaryY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 10 : 120;
+
+    // Section 2: Deliveries Accountability Table
+    doc.setTextColor(17, 28, 44);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(`2. RELAÇÃO NOMINAL DE ENTREGAS (${filteredDeliveries.length} REGISTROS)`, 14, afterSummaryY);
+
+    const deliveryRows =
+      filteredDeliveries.length > 0
+        ? filteredDeliveries.map((d) => [
+            d.protocolNumber,
+            d.familyName,
+            d.dateFormatted ? `${d.dateFormatted} ${d.timeFormatted}` : d.timeFormatted,
+            d.basketType || 'Cesta Básica',
+            d.volunteerName,
+            d.pastoralVisitRequested ? 'Solicitada' : 'Não',
+            d.status,
+          ])
+        : [['—', 'Nenhuma entrega registrada para os filtros atuais.', '—', '—', '—', '—', '—']];
+
+    autoTable(doc, {
+      startY: afterSummaryY + 4,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [0, 96, 62],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8.5,
+      },
+      bodyStyles: {
+        fontSize: 8.2,
+        textColor: [30, 41, 59],
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 255],
+      },
+      head: [['Protocolo', 'Família Beneficiária', 'Data / Hora', 'Benefício', 'Voluntário', 'Visita', 'Situação']],
+      body: deliveryRows,
+    });
+
+    // Section 3: Signatures Block
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let signY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 24 : pageHeight - 42;
+    if (signY > pageHeight - 36) {
+      doc.addPage();
+      signY = 40;
+    }
+
+    doc.setDrawColor(100, 116, 139);
+    doc.setLineWidth(0.3);
+    doc.line(22, signY, 92, signY);
+    doc.line(pageWidth - 92, signY, pageWidth - 22, signY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(17, 28, 44);
+    doc.text('Coordenação Pastoral dos Vicentinos', 57, signY + 5, { align: 'center' });
+    doc.text(`Pároco / Conselho Paroquial`, pageWidth - 57, signY + 5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Responsável pela Conferência', 57, signY + 9.5, { align: 'center' });
+    doc.text(settings.parishName, pageWidth - 57, signY + 9.5, { align: 'center' });
+
+    // Footer with page numbers
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 130, 140);
+      doc.text(
+        `Documento Oficial de Prestação de Contas • ${settings.parishName} • Página ${i} de ${totalPages}`,
+        pageWidth / 2,
+        pageHeight - 8,
+        { align: 'center' }
+      );
+    }
+
+    const safeParish = settings.parishName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+    doc.save(`Balancete_Oficial_${safeParish}_${issueDate.toISOString().slice(0, 7)}.pdf`);
   };
 
   const handleExportCSV = () => {
@@ -185,8 +309,8 @@ ${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName}
             onClick={handleDownloadPDF}
             className="inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl bg-[#00603e] hover:bg-[#1b7a53] text-white font-bold text-[13px] sm:text-[14px] shadow-sm transition-all min-h-[44px]"
           >
-            <Download className="w-4 h-4" />
-            <span>Baixar Balancete Oficial</span>
+            <FileText className="w-4 h-4" />
+            <span>Baixar Balancete Oficial (PDF)</span>
           </button>
         </div>
       </div>
@@ -477,7 +601,7 @@ ${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName}
               <tr className="border-b border-[#dee8ff] bg-[#f8faff] text-[11px] font-bold uppercase tracking-wider text-[#6f7a72]">
                 <th className="py-3 px-4 sm:px-6">Protocolo</th>
                 <th className="py-3 px-4 sm:px-6">Família Beneficiária</th>
-                <th className="py-3 px-4 sm:px-6">Horário</th>
+                <th className="py-3 px-4 sm:px-6">Data / Horário</th>
                 <th className="py-3 px-4 sm:px-6">Voluntário</th>
                 <th className="py-3 px-4 sm:px-6">Visita Pastoral</th>
                 <th className="py-3 px-4 sm:px-6">Status / Cota</th>
@@ -500,7 +624,7 @@ ${todayDeliveries.map((d, i) => `${i + 1}. [${d.protocolNumber}] ${d.familyName}
                       {d.familyName}
                     </td>
                     <td className="py-3.5 px-4 sm:px-6 text-[#3f4942] whitespace-nowrap">
-                      {d.timeFormatted}
+                      {d.dateFormatted ? `${d.dateFormatted} • ${d.timeFormatted}` : d.timeFormatted}
                     </td>
                     <td className="py-3.5 px-4 sm:px-6 text-[#3f4942] whitespace-nowrap">
                       {d.volunteerName}

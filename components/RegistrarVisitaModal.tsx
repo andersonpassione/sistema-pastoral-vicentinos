@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   HeartHandshake, 
@@ -53,13 +53,21 @@ export default function RegistrarVisitaModal({
   onSaveVisit,
   currentVolunteerName = 'Irmão Carlos (Vicentino)'
 }: RegistrarVisitaModalProps) {
+  const sortedFamilies = useMemo(
+    () =>
+      [...families].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      ),
+    [families]
+  );
+
   // Family selection state
-  const effectiveInitialFamilyId = preselectedFamily ? preselectedFamily.id : (families[0]?.id || '');
+  const effectiveInitialFamilyId = preselectedFamily ? preselectedFamily.id : (sortedFamilies[0]?.id || '');
   const [selectedFamilyId, setSelectedFamilyId] = useState<string>(effectiveInitialFamilyId);
   const [familySearch, setFamilySearch] = useState<string>('');
   
   // Active selected family
-  const activeFamily = preselectedFamily || families.find((f) => f.id === selectedFamilyId) || families[0] || null;
+  const activeFamily = preselectedFamily || sortedFamilies.find((f) => f.id === selectedFamilyId) || sortedFamilies[0] || null;
 
   // Visit details
   const [visitDate, setVisitDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -81,7 +89,7 @@ export default function RegistrarVisitaModal({
 
   if (!isOpen) return null;
 
-  const filteredFamilies = families.filter((f) => {
+  const filteredFamilies = sortedFamilies.filter((f) => {
     if (!familySearch.trim()) return true;
     const term = familySearch.toLowerCase();
     return f.name.toLowerCase().includes(term) || f.cpf.includes(term) || f.bairro.toLowerCase().includes(term);
