@@ -555,8 +555,35 @@ export async function updatePastoralSettings(data: {
 export async function deleteFamily(familyId: string) {
   if (hasSupabase) {
     try {
-      const { data, error } = await supabaseAdmin.from('families').delete().eq('id', familyId).select();
+      // Remove registros dependentes vinculados (delivery_records e periodic_visits têm ON DELETE RESTRICT no schema)
+      const { error: delErr } = await supabaseAdmin
+        .from('delivery_records')
+        .delete()
+        .eq('family_id', familyId);
+      if (delErr) throw delErr;
+
+      const { error: visErr } = await supabaseAdmin
+        .from('periodic_visits')
+        .delete()
+        .eq('family_id', familyId);
+      if (visErr) throw visErr;
+
+      const { error: depErr } = await supabaseAdmin
+        .from('dependents')
+        .delete()
+        .eq('family_id', familyId);
+      if (depErr) throw depErr;
+
+      const { data, error } = await supabaseAdmin
+        .from('families')
+        .delete()
+        .eq('id', familyId)
+        .select();
+
       if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Família não encontrada ou sem permissão para exclusão no Supabase.');
+      }
       return data;
     } catch (error: any) {
       console.error('Error deleting family from Supabase:', error);
@@ -565,10 +592,17 @@ export async function deleteFamily(familyId: string) {
   }
 
   try {
-    return await db.delete(families).where(eq(families.id, familyId)).returning();
-  } catch (error) {
+    await db.delete(deliveryRecords).where(eq(deliveryRecords.familyId, familyId));
+    await db.delete(periodicVisits).where(eq(periodicVisits.familyId, familyId));
+    await db.delete(dependents).where(eq(dependents.familyId, familyId));
+    const deleted = await db.delete(families).where(eq(families.id, familyId)).returning();
+    if (!deleted || deleted.length === 0) {
+      throw new Error('Família não encontrada no banco de dados.');
+    }
+    return deleted;
+  } catch (error: any) {
     console.error('Error deleting family from PostgreSQL:', error);
-    throw new Error('Falha ao excluir família no banco de dados.', { cause: error });
+    throw new Error(error.message || 'Falha ao excluir família no banco de dados.', { cause: error });
   }
 }
 

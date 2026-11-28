@@ -454,15 +454,26 @@ export default function Home() {
 
   const handleDeleteFamily = async (family: Family) => {
     try {
-      await fetch(`/api/families?id=${encodeURIComponent(family.id)}`, { method: 'DELETE' });
-    } catch (err) {
+      const res = await fetch(`/api/families?id=${encodeURIComponent(family.id)}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || 'Não foi possível excluir a família no Supabase.');
+      }
+
+      setFamilies((prev) => prev.filter((f) => f.id !== family.id));
+      setTodayDeliveries((prev) => prev.filter((d) => d.familyId !== family.id));
+      setVisits((prev) => prev.filter((v) => v.familyId !== family.id));
+      if (selectedProntuarioFamily?.id === family.id) {
+        setSelectedProntuarioFamily(null);
+      }
+      if (familyForDelivery?.id === family.id) {
+        setFamilyForDelivery(null);
+      }
+      showToast(`Família ${family.name} excluída definitivamente do banco de dados.`);
+    } catch (err: any) {
       console.error('Erro ao excluir família no Supabase:', err);
+      showToast(err?.message || 'Erro ao excluir família no banco de dados.');
     }
-    setFamilies((prev) => prev.filter((f) => f.id !== family.id));
-    if (selectedProntuarioFamily?.id === family.id) {
-      setSelectedProntuarioFamily(null);
-    }
-    showToast(`Família ${family.name} excluída com sucesso do banco de dados.`);
   };
 
   const [familyForDelivery, setFamilyForDelivery] = useState<Family | null>(null);
