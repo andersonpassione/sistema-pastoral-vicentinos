@@ -21,7 +21,8 @@ import {
   Sparkles,
   Ban,
   HeartHandshake,
-  Lock
+  Lock,
+  ArrowDownAZ
 } from 'lucide-react';
 import { Family, FamilyStatus, getFamilyStatusLabel } from '@/lib/data';
 
@@ -62,6 +63,7 @@ export default function FamiliasBeneficiariasView({
   const [statusFilter, setStatusFilter] = useState('');
   const [vulnerabilityFilter, setVulnerabilityFilter] = useState('');
   const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null);
+  const [sortAlphabetical, setSortAlphabetical] = useState<boolean>(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,9 +77,9 @@ export default function FamiliasBeneficiariasView({
     setCurrentPage(1);
   }
 
-  // Filter logic
+  // Filter & Sort logic
   const filteredFamilies = useMemo(() => {
-    return families.filter((f) => {
+    const filtered = families.filter((f) => {
       // Text search
       if (searchTerm) {
         const query = searchTerm.toLowerCase();
@@ -115,7 +117,15 @@ export default function FamiliasBeneficiariasView({
 
       return true;
     });
-  }, [families, searchTerm, bairroFilter, statusFilter, vulnerabilityFilter, activeQuickFilter]);
+
+    if (sortAlphabetical) {
+      return [...filtered].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+      );
+    }
+
+    return filtered;
+  }, [families, searchTerm, bairroFilter, statusFilter, vulnerabilityFilter, activeQuickFilter, sortAlphabetical]);
 
   const totalPages = Math.ceil(filteredFamilies.length / itemsPerPage) || 1;
   const displayedFamilies = filteredFamilies.slice(
@@ -129,6 +139,8 @@ export default function FamiliasBeneficiariasView({
     setStatusFilter('');
     setVulnerabilityFilter('');
     setActiveQuickFilter(null);
+    setSortAlphabetical(false);
+    setCurrentPage(1);
   };
 
   const handleExport = () => {
@@ -369,7 +381,10 @@ export default function FamiliasBeneficiariasView({
             </button>
             <button
               type="button"
-              onClick={() => setActiveQuickFilter(activeQuickFilter === 'criancas' ? null : 'criancas')}
+              onClick={() => {
+                setActiveQuickFilter(activeQuickFilter === 'criancas' ? null : 'criancas');
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors font-medium shrink-0 ${
                 activeQuickFilter === 'criancas'
                   ? 'bg-[#1b7a53] text-white font-bold'
@@ -377,6 +392,22 @@ export default function FamiliasBeneficiariasView({
               }`}
             >
               <span>Famílias com Crianças</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSortAlphabetical((prev) => !prev);
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-1 rounded-full whitespace-nowrap transition-colors font-medium shrink-0 flex items-center gap-1.5 ${
+                sortAlphabetical
+                  ? 'bg-[#00603e] text-white font-bold'
+                  : 'bg-[#f0f3ff] text-[#00603e] hover:bg-[#dee8ff]'
+              }`}
+              title="Ordenar famílias por nome em ordem alfabética (A–Z)"
+            >
+              <ArrowDownAZ className="w-3.5 h-3.5" />
+              <span>Ordem Alfabética (A–Z)</span>
             </button>
           </div>
         </div>

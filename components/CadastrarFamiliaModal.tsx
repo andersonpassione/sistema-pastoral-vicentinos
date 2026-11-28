@@ -32,6 +32,14 @@ interface CadastrarFamiliaModalProps {
   existingFamilies?: Family[];
 }
 
+function formatMobilePhone(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export default function CadastrarFamiliaModal({
   isOpen,
   onClose,
@@ -63,7 +71,7 @@ export default function CadastrarFamiliaModal({
   const [cpf, setCpf] = useState(familyToEdit?.cpf ? formatCpf(familyToEdit.cpf) : '');
   const [rg, setRg] = useState(familyToEdit?.rg || '');
   const [birthDate, setBirthDate] = useState(familyToEdit?.birthDate || '');
-  const [phone, setPhone] = useState(familyToEdit?.phone || '');
+  const [phone, setPhone] = useState(familyToEdit?.phone ? formatMobilePhone(familyToEdit.phone) : '');
   const [genderIdentity, setGenderIdentity] = useState(familyToEdit ? normalizeGender(familyToEdit.genderIdentity) : '');
 
   const [cep, setCep] = useState(familyToEdit ? '08540-120' : '');
@@ -103,6 +111,9 @@ export default function CadastrarFamiliaModal({
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [cepStatusMessage, setCepStatusMessage] = useState<{ text: string; isError?: boolean } | null>(null);
 
+  // Validation state
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
+
   // CPF validation status
   const cleanCpfDigits = cpf.replace(/\D/g, '');
   const isCpfComplete = cleanCpfDigits.length === 11;
@@ -111,6 +122,31 @@ export default function CadastrarFamiliaModal({
     ? existingFamilies.find((f) => f.id !== familyToEdit?.id && f.cpf.replace(/\D/g, '') === cleanCpfDigits)
     : null;
   const isAlugada = tipoHabitacao === 'Alugada' || tipoHabitacao.toLowerCase().includes('alugada');
+
+  // Required (*) fields validation
+  const isNomeValid = nome.trim().length > 0;
+  const isCpfFieldValid = isCpfComplete && Boolean(isCpfValid) && !duplicateFamily;
+  const isBirthDateValid = birthDate.trim().length > 0;
+  const isPhoneValid = phone.replace(/\D/g, '').length === 11;
+  const isStep1Valid = isNomeValid && isCpfFieldValid && isBirthDateValid && isPhoneValid && Boolean(status);
+
+  const isLogradouroValid = logradouro.trim().length > 0;
+  const isNumeroValid = numero.trim().length > 0;
+  const isBairroValid = bairro.trim().length > 0;
+  const isStep2Valid = isLogradouroValid && isNumeroValid && isBairroValid;
+
+  const missingRequiredFields: { label: string; step: number }[] = [];
+  if (!isNomeValid) missingRequiredFields.push({ label: 'Nome Completo', step: 1 });
+  if (!isCpfComplete) missingRequiredFields.push({ label: 'CPF', step: 1 });
+  else if (!isCpfValid) missingRequiredFields.push({ label: 'CPF válido', step: 1 });
+  else if (duplicateFamily) missingRequiredFields.push({ label: 'CPF não duplicado', step: 1 });
+  if (!isBirthDateValid) missingRequiredFields.push({ label: 'Data de Nascimento', step: 1 });
+  if (!isPhoneValid) missingRequiredFields.push({ label: 'Telefone / WhatsApp', step: 1 });
+  if (!isLogradouroValid) missingRequiredFields.push({ label: 'Logradouro / Rua', step: 2 });
+  if (!isNumeroValid) missingRequiredFields.push({ label: 'Número', step: 2 });
+  if (!isBairroValid) missingRequiredFields.push({ label: 'Bairro', step: 2 });
+
+  const areAllRequiredFieldsValid = missingRequiredFields.length === 0;
 
   if (!isOpen) return null;
 
@@ -194,21 +230,9 @@ export default function CadastrarFamiliaModal({
   };
 
   const handleFormSubmit = (triggerDelivery: boolean) => {
-    if (!nome.trim()) {
-      alert('Por favor, informe o nome completo do responsável legal.');
-      setCurrentStep(1);
-      return;
-    }
-
-    if (cleanCpfDigits.length > 0 && !validateCpf(cpf)) {
-      alert('O CPF informado é inválido. Por favor, verifique os 11 dígitos.');
-      setCurrentStep(1);
-      return;
-    }
-
-    if (duplicateFamily) {
-      alert(`Cadastro Bloqueado: Já existe uma família cadastrada com este CPF ("${duplicateFamily.name}", Bairro: ${duplicateFamily.bairro}). Não é permitido cadastro duplicado com o mesmo CPF.`);
-      setCurrentStep(1);
+    if (!areAllRequiredFieldsValid) {
+      setShowValidationErrors(true);
+      setCurrentStep(missingRequiredFields[0].step);
       return;
     }
 
@@ -229,15 +253,15 @@ export default function CadastrarFamiliaModal({
 
     const savedFamily: Family = {
       id: familyToEdit ? familyToEdit.id : 'fam-' + Date.now(),
-      name: nome,
-      cpf: cpf || '000.000.000-00',
+      name: nome.trim(),
+      cpf: cpf,
       nis: familyToEdit?.nis || ('160.' + Math.floor(1000 + Math.random() * 9000) + '.' + Math.floor(100 + Math.random() * 900) + '-0'),
       rg,
       birthDate,
-      phone,
+      phone: phone.trim(),
       genderIdentity: genderIdentity || 'Mulher',
-      bairro: bairro || 'Vila Esperança',
-      address: numero ? `${logradouro || 'Endereço não informado'}, ${numero}` : (logradouro || 'Endereço não informado'),
+      bairro: bairro.trim(),
+      address: `${logradouro.trim()}, ${numero.trim()}`,
       housingType: tipoHabitacao || 'Alugada',
       rentValue: numericRent,
       referencePoint: pontoReferencia,
@@ -310,12 +334,13 @@ export default function CadastrarFamiliaModal({
         {/* Wizard Navigation Steps Tabs */}
         <div className="px-4 sm:px-6 bg-white border-b border-[#dee8ff] flex items-center gap-4 sm:gap-6 overflow-x-auto pb-0">
           {[
-            { step: 1, label: 'Responsável Legal' },
-            { step: 2, label: 'Endereço & Moradia' },
-            { step: 3, label: 'Composição Familiar' },
-            { step: 4, label: 'Critérios' }
+            { step: 1, label: 'Responsável Legal', isValid: isStep1Valid, hasRequired: true },
+            { step: 2, label: 'Endereço & Moradia', isValid: isStep2Valid, hasRequired: true },
+            { step: 3, label: 'Composição Familiar', isValid: true, hasRequired: false },
+            { step: 4, label: 'Critérios', isValid: true, hasRequired: false }
           ].map((item) => {
             const isActive = currentStep === item.step;
+            const hasPendingError = showValidationErrors && item.hasRequired && !item.isValid;
             return (
               <button
                 key={item.step}
@@ -324,17 +349,23 @@ export default function CadastrarFamiliaModal({
                 className={`py-3 text-[13px] font-bold border-b-2 flex items-center gap-1.5 shrink-0 transition-colors ${
                   isActive
                     ? 'text-[#00603e] border-[#00603e]'
-                    : 'text-[#3f4942] border-transparent hover:text-[#111c2c]'
+                    : hasPendingError
+                      ? 'text-[#ba1a1a] border-transparent hover:text-[#93000a]'
+                      : 'text-[#3f4942] border-transparent hover:text-[#111c2c]'
                 }`}
               >
                 <span
                   className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-bold ${
                     isActive
                       ? 'bg-[#00603e] text-white'
-                      : 'bg-[#e7eeff] text-[#3f4942]'
+                      : hasPendingError
+                        ? 'bg-[#ffdad6] text-[#ba1a1a]'
+                        : item.hasRequired && item.isValid
+                          ? 'bg-[#9cf5c5] text-[#005234]'
+                          : 'bg-[#e7eeff] text-[#3f4942]'
                   }`}
                 >
-                  {item.step}
+                  {item.hasRequired && item.isValid ? '✓' : item.step}
                 </span>
                 <span>{item.label}</span>
               </button>
@@ -369,9 +400,18 @@ export default function CadastrarFamiliaModal({
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     placeholder="Digite o nome completo"
-                    className="w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                    className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 ${
+                      showValidationErrors && !isNomeValid
+                        ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                        : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                    }`}
                     required
                   />
+                  {showValidationErrors && !isNomeValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe o nome completo do responsável.
+                    </span>
+                  )}
                 </div>
 
                 {/* CPF com Máscara e Validação Oficial */}
@@ -395,7 +435,7 @@ export default function CadastrarFamiliaModal({
                     placeholder="000.000.000-00"
                     maxLength={14}
                     className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] font-mono text-[14px] focus:outline-none focus:ring-2 transition-all ${
-                      duplicateFamily
+                      duplicateFamily || (showValidationErrors && !isCpfFieldValid)
                         ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
                         : isCpfComplete
                         ? isCpfValid
@@ -416,6 +456,10 @@ export default function CadastrarFamiliaModal({
                     <span className="text-[11px] text-[#ba1a1a] font-bold flex items-center gap-1 mt-0.5">
                       <AlertCircle className="w-3.5 h-3.5 text-[#ba1a1a]" />
                       CPF inválido. Verifique os dígitos informados.
+                    </span>
+                  ) : showValidationErrors && !isCpfComplete ? (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe um CPF válido com 11 dígitos.
                     </span>
                   ) : null}
                 </div>
@@ -440,9 +484,18 @@ export default function CadastrarFamiliaModal({
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                    className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 ${
+                      showValidationErrors && !isBirthDateValid
+                        ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                        : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                    }`}
                     required
                   />
+                  {showValidationErrors && !isBirthDateValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe a data de nascimento.
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -450,13 +503,25 @@ export default function CadastrarFamiliaModal({
                   <div className="relative">
                     <input
                       type="tel"
+                      inputMode="numeric"
+                      maxLength={15}
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(formatMobilePhone(e.target.value))}
                       placeholder="(11) 90000-0000"
-                      className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                      className={`w-full h-11 pl-10 pr-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] font-mono text-[14px] focus:outline-none focus:ring-2 ${
+                        showValidationErrors && !isPhoneValid
+                          ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                          : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                      }`}
+                      required
                     />
                     <MessageSquare className="w-4 h-4 text-[#1b7a53] absolute left-3 top-1/2 -translate-y-1/2" />
                   </div>
+                  {showValidationErrors && !isPhoneValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe o celular com DDD e 11 dígitos, ex.: (11) 90000-0000.
+                    </span>
+                  )}
                 </div>
 
                 <div className="md:col-span-2 flex flex-col gap-1">
@@ -562,14 +627,11 @@ export default function CadastrarFamiliaModal({
                 <button
                   type="button"
                   onClick={() => {
-                    if (!nome.trim()) {
-                      alert('Informe o nome do responsável.');
+                    if (!isStep1Valid) {
+                      setShowValidationErrors(true);
                       return;
                     }
-                    if (cleanCpfDigits.length > 0 && !validateCpf(cpf)) {
-                      alert('O CPF digitado é inválido. Corrija para avançar.');
-                      return;
-                    }
+                    setShowValidationErrors(false);
                     setCurrentStep(2);
                   }}
                   className="px-6 py-2.5 rounded-xl bg-[#1b7a53] text-white font-bold text-[13px] hover:bg-[#00603e] transition-colors"
@@ -631,9 +693,18 @@ export default function CadastrarFamiliaModal({
                     value={logradouro}
                     onChange={(e) => setLogradouro(e.target.value)}
                     placeholder="Rua, Avenida, Travessa..."
-                    className="w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                    className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 ${
+                      showValidationErrors && !isLogradouroValid
+                        ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                        : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                    }`}
                     required
                   />
+                  {showValidationErrors && !isLogradouroValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe o logradouro ou rua.
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -643,9 +714,18 @@ export default function CadastrarFamiliaModal({
                     value={numero}
                     onChange={(e) => setNumero(e.target.value)}
                     placeholder="Nº ou S/N"
-                    className="w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                    className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 ${
+                      showValidationErrors && !isNumeroValid
+                        ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                        : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                    }`}
                     required
                   />
+                  {showValidationErrors && !isNumeroValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe o número (ou S/N).
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">
@@ -656,9 +736,18 @@ export default function CadastrarFamiliaModal({
                     value={bairro}
                     onChange={(e) => setBairro(e.target.value)}
                     placeholder="Informe o bairro"
-                    className="w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border border-[#d8e3fa] text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 focus:ring-[#1b7a53]"
+                    className={`w-full h-11 px-4 rounded-xl bg-[#f0f3ff] border text-[#111c2c] text-[14px] focus:outline-none focus:ring-2 ${
+                      showValidationErrors && !isBairroValid
+                        ? 'border-[#ba1a1a] bg-[#fff0ef] focus:ring-[#ba1a1a]'
+                        : 'border-[#d8e3fa] focus:ring-[#1b7a53]'
+                    }`}
                     required
                   />
+                  {showValidationErrors && !isBairroValid && (
+                    <span className="text-[11px] text-[#ba1a1a] font-semibold">
+                      Informe o bairro.
+                    </span>
+                  )}
                   <datalist id="bairros-sugestoes">
                     <option value="Vila Esperança" />
                     <option value="Centro" />
@@ -731,7 +820,14 @@ export default function CadastrarFamiliaModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => {
+                    if (!isStep2Valid) {
+                      setShowValidationErrors(true);
+                      return;
+                    }
+                    setShowValidationErrors(false);
+                    setCurrentStep(3);
+                  }}
                   className="px-6 py-2.5 rounded-xl bg-[#1b7a53] text-white font-bold text-[13px] hover:bg-[#00603e] transition-colors"
                 >
                   Avançar para Composição Familiar →
@@ -1064,43 +1160,70 @@ export default function CadastrarFamiliaModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 sm:p-6 bg-[#f0f3ff] border-t border-[#dee8ff] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto px-5 h-11 sm:h-12 rounded-xl text-[#3f4942] hover:text-[#111c2c] font-semibold text-[14px] hover:bg-[#dee8ff]/50 transition-colors order-2 sm:order-1 min-h-[44px]"
-          >
-            Cancelar
-          </button>
+        <div className="p-4 sm:p-6 bg-[#f0f3ff] border-t border-[#dee8ff] flex flex-col gap-3">
+          {!areAllRequiredFieldsValid && (
+            <div className="px-3.5 py-2.5 rounded-xl bg-[#fff4eb] border border-[#ffdcc3] text-[11px] sm:text-[12px] text-[#814400] flex items-start sm:items-center gap-2 flex-wrap">
+              <AlertCircle className="w-4 h-4 text-[#a45800] shrink-0 mt-0.5 sm:mt-0" />
+              <span className="font-bold">Campos obrigatórios (*) pendentes:</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {missingRequiredFields.map((field) => (
+                  <button
+                    key={field.label}
+                    type="button"
+                    onClick={() => {
+                      setShowValidationErrors(true);
+                      setCurrentStep(field.step);
+                    }}
+                    className="px-2 py-0.5 rounded-md bg-white border border-[#ffdcc3] text-[#814400] hover:bg-[#ffeed4] font-semibold underline-offset-2 hover:underline transition-colors"
+                    title={`Ir para Etapa ${field.step}`}
+                  >
+                    {field.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto order-1 sm:order-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
             <button
               type="button"
-              onClick={() => handleFormSubmit(false)}
-              disabled={Boolean(duplicateFamily)}
-              className="w-full sm:w-auto px-6 h-11 sm:h-12 rounded-xl bg-[#00603e] hover:bg-[#1b7a53] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-[14px] transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.99] min-h-[44px]"
+              onClick={onClose}
+              className="w-full sm:w-auto px-5 h-11 sm:h-12 rounded-xl text-[#3f4942] hover:text-[#111c2c] font-semibold text-[14px] hover:bg-[#dee8ff]/50 transition-colors order-2 sm:order-1 min-h-[44px]"
             >
-              {isEditing ? <Edit3 className="w-4 h-4" /> : null}
-              <span>{isEditing ? 'Salvar Alterações' : 'Salvar Cadastro'}</span>
+              Cancelar
             </button>
-            {!isEditing && (
-              status === 'em_acompanhamento' ? (
-                <button
-                  type="button"
-                  onClick={() => handleFormSubmit(true)}
-                  disabled={Boolean(duplicateFamily)}
-                  className="w-full sm:w-auto px-6 h-11 sm:h-12 rounded-xl bg-[#1b7a53] hover:bg-[#00603e] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-[13px] sm:text-[14px] transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.99] min-h-[44px]"
-                >
-                  <Package className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span>Salvar e Já Realizar 1ª Entrega</span>
-                </button>
-              ) : (
-                <div className="text-[11px] text-[#45474c] bg-[#e2e2e9] px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-1.5 self-center border border-[#c6c6ce]">
-                  <AlertCircle className="w-4 h-4 text-[#76777d] shrink-0" />
-                  <span>Famílias {getFamilyStatusLabel(status)} não recebem cestas (apenas histórico estatístico).</span>
-                </div>
-              )
-            )}
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto order-1 sm:order-2">
+              <button
+                type="button"
+                onClick={() => handleFormSubmit(false)}
+                disabled={!areAllRequiredFieldsValid}
+                title={!areAllRequiredFieldsValid ? 'Preencha todos os campos obrigatórios (*) para salvar' : undefined}
+                className="w-full sm:w-auto px-6 h-11 sm:h-12 rounded-xl bg-[#00603e] hover:bg-[#1b7a53] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-[14px] transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.99] min-h-[44px]"
+              >
+                {isEditing ? <Edit3 className="w-4 h-4" /> : null}
+                <span>{isEditing ? 'Salvar Alterações' : 'Salvar Cadastro'}</span>
+              </button>
+              {!isEditing && (
+                status === 'em_acompanhamento' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleFormSubmit(true)}
+                    disabled={!areAllRequiredFieldsValid}
+                    title={!areAllRequiredFieldsValid ? 'Preencha todos os campos obrigatórios (*) para salvar e entregar' : undefined}
+                    className="w-full sm:w-auto px-6 h-11 sm:h-12 rounded-xl bg-[#1b7a53] hover:bg-[#00603e] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-[13px] sm:text-[14px] transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 active:scale-[0.99] min-h-[44px]"
+                  >
+                    <Package className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Salvar e Já Realizar 1ª Entrega</span>
+                  </button>
+                ) : (
+                  <div className="text-[11px] text-[#45474c] bg-[#e2e2e9] px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-1.5 self-center border border-[#c6c6ce]">
+                    <AlertCircle className="w-4 h-4 text-[#76777d] shrink-0" />
+                    <span>Famílias {getFamilyStatusLabel(status)} não recebem cestas (apenas histórico estatístico).</span>
+                  </div>
+                )
+              )}
+            </div>
           </div>
         </div>
 
