@@ -1,81 +1,84 @@
 # 🕊️ Sistema de Gestão Pastoral dos Vicentinos
 
-> Plataforma web para gestão humanizada, segura e eficiente da distribuição de benefícios alimentares (cestas básicas), prontuários de famílias beneficiárias e visitas pastorais da **Sociedade de São Vicente de Paulo (SSVP)**.
+> Plataforma web para gestão humanizada, segura e auditável da distribuição de cestas básicas, prontuários de famílias beneficiárias, visitas domiciliares e prestação de contas da **Sociedade de São Vicente de Paulo (SSVP)**.
 
 ---
 
 ## 📋 Visão Geral
 
-O **Sistema de Gestão Pastoral dos Vicentinos** foi projetado para auxiliar conferências e pastorais paroquiais na organização do plantão de atendimento e na promoção social de famílias em situação de vulnerabilidade.
+O **Sistema de Gestão Pastoral dos Vicentinos** foi desenvolvido para apoiar conferências e pastorais paroquiais na organização dos plantões de atendimento e no acompanhamento social de famílias em situação de vulnerabilidade.
 
-O sistema elimina o controle manual em fichas de papel, impede duplicidades de cadastros via validação estrita de CPF único, previne entregas excedentes no mesmo mês e mantém o registro histórico para auditoria e prestação de contas da paróquia.
+A aplicação substitui o controle manual em fichas de papel por uma base relacional integrada ao **Supabase**, garantindo unicidade de cadastro por CPF, controle mensal rigoroso de entregas, notificações reais do plantão e emissão oficial de relatórios e balancetes em PDF.
 
 ---
 
 ## ✨ Principais Funcionalidades
 
 ### 1. 📦 Entrega Rápida de Cestas Básicas
-* **Busca Inteligente:** Pesquisa em tempo real por **Nome** ou **CPF** (com formatação automática).
-* **Controle Estrito de Limite Mensal:** Impede automaticamente a entrega de mais de **1 cesta básica no mesmo mês** para a mesma família.
-* **Intervalo Paroquial Configurável:** Verificação automática do intervalo mínimo de retiradas (padrão de 28 a 30 dias).
-* **Protocolo Auditável:** Toda entrega concluída gera um número de protocolo único (ex: `#ENT-202611-01`), registrando data, horário, voluntário responsável e tipo da cesta.
-* **Painel do Plantão:** Acompanhamento ao vivo de todas as retiradas do dia com contador de cestas distribuídas.
-* **Recibo e Termo de Entrega:** Visualização imediata do comprovante de entrega para conferência.
+* **Busca Imediata:** Localização de famílias por **Nome**, **CPF** ou **NIS**, além de sugestões rápidas com indicador visual de aptidão.
+* **Regra Estrita de Cota Mensal (1/Mês):** Impede automaticamente mais de **1 cesta básica no mesmo mês civil** para a mesma família, tanto na interface quanto na validação da API/banco.
+* **Intervalo Paroquial Configurável:** Verifica o intervalo mínimo de dias configurado pela paróquia (ex.: 28 ou 30 dias), permitindo autorização excepcional justificada apenas quando dentro da cota mensal.
+* **Bloqueio por Status Cadastral:** Famílias com status **Promovida** ou **Inativa** ficam bloqueadas para novas retiradas, preservando apenas o histórico estatístico.
+* **Protocolo e Histórico:** Toda entrega gera número de protocolo único (ex.: `#ENT-202611-01`), registrando data, horário, voluntário responsável, observações e opção de solicitação de visita pastoral.
 
 ### 2. 👨‍👩‍👧‍👦 Famílias Beneficiárias (Prontuário Social)
-* **Prevenção de Duplicidade:** Cadastro obrigatório com **CPF Único**, impedindo que a mesma pessoa receba por mais de uma conferência.
-* **Ficha Cadastral Completa:** Registro de NIS/PIS, RG, data de nascimento, telefone, endereço, tipo de moradia (própria, alugada, cedida), valor do aluguel e ponto de referência.
-* **Composição Familiar e Dependentes:** Cadastro detalhado de filhos, idosos e dependentes com idade, faixa etária (primeira infância, escolar) e demandas de saúde/educação.
-* **Classificação de Vulnerabilidade:** Categorização socioeconômica (*Extrema Pobreza* e *Baixa Renda*) com cálculo de renda per capita.
-* **Ciclo de Vida do Cadastro:**
-  * 🟢 **Em Acompanhamento:** Família ativa no programa e apta a receber cestas conforme o intervalo paroquial.
-  * 🟡 **Promovida:** Família que alcançou autonomia alimentar/financeira. Mantida no sistema exclusivamente para histórico estatístico (entregas bloqueadas).
-  * ⚪ **Inativa:** Cadastros arquivados por mudança de município ou falecimento (entregas bloqueadas).
+* **Validação Rigorosa de Cadastro:**
+  * Preenchimento obrigatório validado para todos os campos marcados com `*` antes de habilitar **Salvar Cadastro** ou **Salvar e Já Realizar 1ª Entrega**.
+  * **CPF único e válido** (com dígito verificador e bloqueio contra duplicidade).
+  * **Telefone celular** restrito a números e formatado no padrão brasileiro `(00) 00000-0000`.
+  * **Busca automática de endereço por CEP** via integração com a API ViaCEP.
+* **Composição Familiar e Renda:** Registro de dependentes (faixa etária, escola, primeira infância, idosos, observações) e cálculo automático de **renda per capita** (*Extrema Pobreza* / *Baixa Renda*).
+* **Filtros Rápidos e Ordenação:** Pesquisa por Nome, CPF, NIS ou Bairro, filtros por status e vulnerabilidade, além de botão **Ordem Alfabética (A–Z)** nos Filtros Rápidos.
+* **Exclusão Definitiva Segura:** Remoção em cascata dos registros vinculados (`delivery_records`, `periodic_visits`, `dependents` e `families`) com confirmação visual no banco de dados.
 
 ### 3. 🤝 Visitas Periódicas Domiciliares
-* Agendamento e registro de visitas pastorais realizadas pelos vicentinos no domicílio das famílias.
-* Relatório qualitativo de necessidades (apoio médico, remédios, material escolar, fraldas, suporte espiritual).
-* Níveis de prioridade de acolhimento: *Urgente*, *Alta*, *Média* e *Baixa*.
-* Alertas para famílias com alta vulnerabilidade que estão sem visita pastoral há mais de 60 dias.
+* **Registro Completo:** Seleção da família beneficiária ordenada alfabeticamente, data, horário, equipe visitadora, tipo de visita, condições de moradia, demandas detectadas e recomendação de retorno.
+* **Visualização em Modal (`Visualizar Ficha`):** Abertura instantânea da ficha completa da visita na tela, com opção de baixar a **Ficha Individual da Visita em PDF** e atalho direto para o **Prontuário Social**.
 
-### 4. 📊 Relatórios e Prestação de Contas
-* Estatísticas da paróquia: total de cestas entregues no mês, famílias ativas assistidas, número de dependentes impactados e taxa de cobertura da cota mensal.
-* Tabela de auditoria completa com filtros por data, voluntário e família.
-* Visualização limpa para prestação de contas com o conselho paroquial e pároco.
+### 4. 📊 Relatórios e Prestação de Contas (Admin)
+* **Indicadores Consolidados:** Cestas entregues no mês vigente, **Projeção Mensal de Cestas** (baseada nas famílias *Em acompanhamento*), total de famílias cadastradas, **crianças assistidas (até 12 anos)** e total de pessoas impactadas.
+* **Balancete Oficial em PDF:** Geração direta de documento A4 via `jsPDF` e `jspdf-autotable` contendo cabeçalho institucional da paróquia, resumo executivo, relação nominal de entregas filtradas, espaços para assinatura da Coordenação Pastoral e Pároco/Conselho e numeração de páginas.
+* **Exportação em CSV:** Download rápido da relação de entregas para planilhas e arquivo contábil.
 
-### 5. ⚙️ Parâmetros Paroquiais e Configurações
-* Ajuste flexível dos parâmetros operacionais:
-  * Nome oficial da Paróquia e Conferência Vicentina.
-  * Padre responsável.
-  * Intervalo mínimo entre retiradas (dias).
-  * Cota mensal planejada de cestas básicas.
-  * Exigência de termo assinado e visita domiciliar obrigatória para famílias críticas.
+### 5. 🔔 Busca Global e Notificações do Plantão
+* **Pesquisa Global no Cabeçalho:** Menu suspenso ao vivo ao digitar Nome, CPF, NIS ou Bairro, com atalhos diretos para abrir o **Prontuário** ou iniciar **Entrega**.
+* **Notificações Conectadas ao Banco:** Alertas dinâmicos gerados a partir dos dados reais do Supabase:
+  * Solicitações de visita pastoral feitas durante entregas ainda pendentes de visita;
+  * Famílias *Em acompanhamento* aptas aguardando cesta no mês vigente;
+  * Resumo das entregas realizadas no plantão do dia;
+  * Visitas periódicas registradas nos últimos 7 dias.
+
+### 6. ⚙️ Configurações Paroquiais
+* Definição do nome oficial da paróquia, intervalo mínimo entre entregas (dias), exigência de assinatura/termo e gestão de perfis (acesso exclusivo de Administrador).
 
 ---
 
-## 🔐 Controle de Acesso e Perfis (RBAC)
+## 🔐 Autenticação, Segurança e Perfis (RBAC)
 
-O sistema possui controle de privilégios com base no perfil de acesso autenticado pelo **Supabase Auth**:
+O acesso ao sistema utiliza autenticação nativa via **Supabase Auth**, **sem credenciais fixas ou senhas armazenadas no código-fonte**.
 
-| Perfil | Usuário Padrão | Permissões |
-| :--- | :--- | :--- |
-| **Administrador** | `anderson` | Acesso total: relatórios gerenciais, prestação de contas, parâmetros da paróquia, gestão de voluntários, alteração de senhas e exclusões. |
-| **Voluntário** | `claudilene` | Acesso operacional: consulta de famílias beneficiárias, conferência de aptidão e registro de entregas de cestas. |
+| Perfil | Permissões |
+| :--- | :--- |
+| **Administrador** | Acesso completo: entrega rápida, cadastro/edição/exclusão de famílias, visitas periódicas, relatórios, balancete em PDF e configurações paroquiais. |
+| **Voluntário** | Acesso operacional: pesquisa e visualização de prontuários de famílias e registro de entregas rápidas de cestas. |
 
-> 🛡️ **Segurança:** O sistema bloqueia a troca de perfil na interface sem autenticação prévia. Para acessar como Administrador, é obrigatório realizar o login fornecendo a respectiva senha.
+### Como Cadastrar Novos Usuários
+1. Acesse o painel do seu projeto no **Supabase** em **Authentication > Users > Add user**.
+2. Informe o e-mail e a senha do novo membro (marque **Auto Confirm User** para liberar o acesso imediato).
+3. Caso o perfil deva ter acesso administrativo, defina `role` como `administrador` na tabela `public.users` (ou nos metadados do usuário).
 
 ---
 
 ## 🛠️ Tecnologias Utilizadas
 
-* **Framework:** [Next.js 15](https://nextjs.org/) (App Router, Server Actions e API Routes)
+* **Framework:** [Next.js 15](https://nextjs.org/) (App Router e API Routes)
 * **Linguagem:** [TypeScript](https://www.typescriptlang.org/)
-* **Biblioteca UI:** [React 19](https://react.dev/)
-* **Estilização:** [Tailwind CSS v4](https://tailwindcss.com/)
-* **Ícones:** [Lucide React](https://lucide.dev/)
-* **Animações:** [Motion (Framer Motion)](https://motion.dev/)
-* **Banco de Dados & Autenticação:** [Supabase](https://supabase.com/) (PostgreSQL relacional com *Row Level Security* e *Supabase Auth*)
-* **ORM:** [Drizzle ORM](https://orm.drizzle.team/) / Postgres Driver
+* **Interface:** [React 19](https://react.dev/) e [Tailwind CSS v4](https://tailwindcss.com/)
+* **Ícones e Animações:** [Lucide React](https://lucide.dev/) e [Motion](https://motion.dev/)
+* **Geração de PDF:** [jsPDF](https://github.com/parallax/jsPDF) e [jspdf-autotable](https://github.com/simonbengtsson/jsPDF-AutoTable)
+* **Banco de Dados & Autenticação:** [Supabase](https://supabase.com/) (PostgreSQL, Row Level Security e Supabase Auth)
+* **ORM / Driver:** [Drizzle ORM](https://orm.drizzle.team/) e `pg`
+* **Consulta Postal:** [ViaCEP](https://viacep.com.br/)
 
 ---
 
@@ -83,59 +86,61 @@ O sistema possui controle de privilégios com base no perfil de acesso autentica
 
 ```text
 ├── app/
-│   ├── api/                     # Rotas de API (Next.js API Routes)
-│   │   ├── deliveries/          # Endpoints de entregas de cestas
-│   │   ├── families/            # CRUD e validações de famílias beneficiárias
-│   │   ├── settings/            # Parâmetros operacionais da paróquia
-│   │   ├── supabase/            # Status de integridade e conexão com o Supabase
-│   │   ├── users/               # Gerenciamento de operadores e senhas
-│   │   └── visits/              # Registro de visitas periódicas
-│   ├── globals.css              # Estilos globais e Tailwind v4
-│   ├── layout.tsx               # Root Layout com metadados e viewport
-│   └── page.tsx                 # Página principal / montador de componentes
+│   ├── api/                        # API Routes (Next.js)
+│   │   ├── deliveries/             # Registro e consulta de entregas com trava mensal
+│   │   ├── families/               # CRUD de famílias beneficiárias e exclusão em cascata
+│   │   ├── settings/               # Parâmetros operacionais da paróquia
+│   │   ├── supabase/               # Verificação de conexão com o Supabase
+│   │   ├── users/                  # Listagem e gestão de perfis
+│   │   └── visits/                 # Registro e consulta de visitas periódicas
+│   ├── globals.css                 # Configuração global do Tailwind CSS v4
+│   ├── layout.tsx                  # Layout raiz e metadados
+│   └── page.tsx                    # Orquestração principal da aplicação
 ├── components/
-│   ├── CadastrarFamiliaModal.tsx   # Modal/Gaveta para novo cadastro e edição
-│   ├── ConfiguracoesView.tsx       # Gestão de parâmetros e usuários (Admin)
-│   ├── ConsultarHistoricoModal.tsx # Consulta detalhada de entregas anteriores
-│   ├── EntregaRapidaView.tsx       # Módulo principal de atendimento do plantão
-│   ├── FamiliasBeneficiariasView.tsx # Listagem, busca e prontuários
-│   ├── Header.tsx                  # Cabeçalho com busca global e menu de usuário
-│   ├── LoginView.tsx               # Tela de autenticação nativa Supabase Auth
-│   ├── ProntuarioModal.tsx         # Ficha social completa da família
-│   ├── RegistrarVisitaModal.tsx    # Formulário de visitas domiciliares
-│   ├── RelatoriosView.tsx          # Prestação de contas e gráficos (Admin)
-│   └── Sidebar.tsx                 # Navegação lateral expansível/responsiva
+│   ├── CadastrarFamiliaModal.tsx   # Cadastro/edição com validação de obrigatórios (*) e máscaras
+│   ├── ConfiguracoesView.tsx       # Parâmetros paroquiais e controle de perfis
+│   ├── ConsultarHistoricoModal.tsx # Consulta de histórico de entregas
+│   ├── EntregaRapidaView.tsx       # Atendimento do plantão e entrega de cestas
+│   ├── FamiliasBeneficiariasView.tsx # Listagem, filtros rápidos (A–Z) e ações
+│   ├── Header.tsx                  # Busca global ao vivo, notificações reais e menu do usuário
+│   ├── LoginView.tsx               # Autenticação via Supabase Auth
+│   ├── ProntuarioModal.tsx         # Prontuário social completo da família
+│   ├── RegistrarVisitaModal.tsx    # Registro de visita com seleção em ordem alfabética
+│   ├── RelatoriosView.tsx          # Indicadores, projeção mensal, CSV e Balancete Oficial (PDF)
+│   ├── Sidebar.tsx                 # Navegação lateral responsiva e recolhível
+│   └── VisitasPeriodicasView.tsx   # Listagem de visitas e modal de visualização/PDF da ficha
 ├── lib/
-│   ├── cpf.ts                   # Utilitários de validação e máscara de CPF
-│   ├── data.ts                  # Tipagens TypeScript e regras de limites mensais
-│   ├── supabase.ts              # Inicialização do cliente Supabase e Auth
-│   └── utils.ts                 # Utilitários de estilização (clsx, tailwind-merge)
+│   ├── cpf.ts                      # Validação e máscaras de CPF e CEP
+│   ├── data.ts                     # Tipagens, datas flexíveis e regras de cota mensal
+│   ├── supabase.ts                 # Clientes Supabase (navegador e servidor)
+│   └── utils.ts                    # Helpers de classes CSS
 ├── src/
 │   └── db/
-│       ├── schema.ts            # Definição do schema relacional (Drizzle ORM)
-│       └── queries.ts           # Consultas e operações no banco de dados
+│       ├── index.ts                # Conexão Drizzle ORM
+│       ├── schema.ts               # Schema relacional PostgreSQL
+│       └── queries.ts              # Operações no Supabase e Drizzle
 ├── supabase/
-│   └── migrations/              # Scripts SQL de criação de tabelas e RLS
+│   └── migrations/                 # Scripts SQL de schema, gatilhos e RLS
 │       ├── 20261031000000_create_pastoral_schema.sql
 │       └── 20261031000001_integrate_supabase_auth.sql
-├── .env.example                 # Modelo de variáveis de ambiente
-├── package.json                 # Dependências e scripts
-└── tsconfig.json                # Configuração do TypeScript
+├── .env.example                    # Modelo das variáveis de ambiente
+├── package.json                    # Dependências e scripts
+└── tsconfig.json                   # Configuração TypeScript
 ```
 
 ---
 
-## 🚀 Como Executar o Projeto Localmente
+## 🚀 Como Executar Localmente
 
 ### Pré-requisitos
 * **Node.js** versão 20 ou superior
-* Gerenciador de pacotes **npm** ou **yarn**
-* Conta e projeto criado no [Supabase](https://supabase.com/)
+* **npm** (ou gerenciador equivalente)
+* Projeto criado no [Supabase](https://supabase.com/)
 
 ### 1. Clonar o Repositório
 ```bash
-git clone https://github.com/andersonpassione/sistema-pastoral-vicentinos.git
-cd sistema-pastoral-vicentinos
+git clone <URL_DO_SEU_REPOSITORIO>
+cd <NOME_DA_PASTA>
 ```
 
 ### 2. Instalar as Dependências
@@ -144,51 +149,42 @@ npm install
 ```
 
 ### 3. Configurar as Variáveis de Ambiente
-Crie um arquivo `.env.local` na raiz do projeto copiando o exemplo:
+Copie o arquivo de exemplo e preencha com as chaves do seu projeto Supabase:
 ```bash
 cp .env.example .env.local
 ```
 
-Preencha com as credenciais do seu projeto Supabase:
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-chave-anon-publica
-SUPABASE_SECRET_KEY=sua-chave-service-role-privada
+NEXT_PUBLIC_SUPABASE_URL="https://seu-projeto.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sua-chave-publica-anon"
+SUPABASE_SECRET_KEY="sua-chave-secreta-service-role"
 ```
 
-> ⚠️ **Importante:** A chave `SUPABASE_SECRET_KEY` (*service_role*) nunca deve ser commitada no Git. Mantenha-a exclusivamente no arquivo `.env.local` que está incluído no `.gitignore`.
+> ⚠️ **Segurança:** Nunca envie arquivos `.env*` ou a chave `SUPABASE_SECRET_KEY` para o GitHub.
 
-### 4. Executar as Migrações no Banco de Dados
-Acesse o **SQL Editor** no painel do Supabase e execute os scripts localizados em:
-1. `supabase/migrations/20261031000000_create_pastoral_schema.sql` (Criação de tabelas, índices e políticas de RLS).
-2. `supabase/migrations/20261031000001_integrate_supabase_auth.sql` (Gatilho automático de novos usuários com Supabase Auth).
+### 4. Executar as Migrações no Supabase
+No **SQL Editor** do painel do Supabase, execute em ordem os arquivos da pasta `supabase/migrations/`:
+1. `20261031000000_create_pastoral_schema.sql`
+2. `20261031000001_integrate_supabase_auth.sql`
 
-### 5. Iniciar o Servidor de Desenvolvimento
+### 5. Iniciar a Aplicação
 ```bash
 npm run dev
 ```
 
-Abra o navegador em [http://localhost:3000](http://localhost:3000).
+Acesse [http://localhost:3000](http://localhost:3000).
 
 ---
 
 ## 📜 Scripts Disponíveis
 
-* `npm run dev`: Inicia o servidor local de desenvolvimento na porta 3000.
-* `npm run build`: Compila a aplicação otimizada para produção.
-* `npm run start`: Inicia o servidor Next.js em modo de produção.
-* `npm run lint`: Executa a verificação estática do código com ESLint.
+* `npm run dev`: Inicia o servidor de desenvolvimento na porta `3000`.
+* `npm run build`: Gera o build de produção com Next.js.
+* `npm run start`: Inicia a aplicação compilada em modo de produção.
+* `npm run lint`: Executa a validação estática de código com ESLint.
 
 ---
 
-## 🤝 Contribuição e Propósito
+## 🤝 Propósito e Licença
 
-Este projeto foi desenvolvido com foco no trabalho voluntário e solidário realizado pelas Conferências Vicentinas e pastorais paroquiais católicas. 
-
-Sugestões de melhorias e novas funcionalidades voltadas à assistência social são sempre bem-vindas!
-
----
-
-## 📄 Licença
-
-Distribuído sob a licença **MIT**. Consulte o arquivo `LICENSE` para mais informações.
+Projeto voltado ao apoio do trabalho voluntário das Conferências Vicentinas e pastorais sociais paroquiais. Distribuído sob a licença **MIT**.
