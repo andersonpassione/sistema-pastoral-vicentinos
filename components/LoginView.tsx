@@ -105,7 +105,7 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
         throw new Error(
           lastErrorMessage.toLowerCase().includes('email not confirmed')
             ? 'E-mail cadastrado no Supabase, mas aguardando confirmação. No painel do Supabase (Authentication > Users), clique nos 3 pontinhos (...) ao lado do usuário e selecione "Confirm user", ou desative "Confirm email" em Providers.'
-            : 'Usuário ou senha incorretos no Supabase.'
+            : 'Usuário ou senha incorretos'
         );
       }
 
@@ -145,7 +145,7 @@ export default function LoginView({ users = [], onLogin }: LoginViewProps) {
       onLogin(finalUser);
     } catch (err: any) {
       console.error('Falha na autenticação Supabase Auth:', err);
-      setError(err.message || 'Usuário ou senha incorretos no Supabase.');
+      setError(err.message || 'Usuário ou senha incorretos');
     } finally {
       setIsLoading(false);
     }
